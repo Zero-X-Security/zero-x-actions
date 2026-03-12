@@ -1,0 +1,48 @@
+# Zero-X GitHub Action - Run security scans in CI and publish results to Zero-X
+# https://github.com/marketplace (publish from Releases)
+name: 'Zero-X Security Scan'
+description: 'Run Semgrep and Trivy in CI and publish results to Zero-X using a platform API key'
+author: 'Zero-X'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  zerox-api-key:
+    description: 'Platform API key from Zero-X Cloud (Settings → API Keys)'
+    required: true
+  zerox-url:
+    description: 'Zero-X platform base URL (e.g. https://app.zero-x.cloud)'
+    required: true
+  scanners:
+    description: 'Comma-separated list: vulns, iac, sast, malware, sbom (default all)'
+    required: false
+    default: 'vulns,iac,sast,malware,sbom'
+  branch-name:
+    description: 'Branch name (default: github.ref_name)'
+    required: false
+  commit-sha:
+    description: 'Commit SHA (default: github.sha)'
+    required: false
+  run-url:
+    description: 'URL to the workflow run (optional)'
+    required: false
+  repo-name:
+    description: 'Repository name (default: github.repository)'
+    required: false
+  repo-owner:
+    description: 'Repository owner (default: github.repository_owner)'
+    required: false
+  repo-url:
+    description: 'Repository URL (default: github.repository_url)'
+    required: false
+
+outputs:
+  scanResultUrl:
+    description: 'A link to the scan results in Zero-X Cloud.'
+  outcome:
+    description: 'Scan outcome (e.g. success, failure).'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

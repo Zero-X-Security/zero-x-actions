@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build (uncomment to build in CI only; keep committed if action runs from dist)
+# dist/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Coverage / Test
+coverage/
+.nyc_output/
