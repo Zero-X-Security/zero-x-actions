@@ -1,0 +1,29 @@
+# Run zizmor to find and fix security issues in GitHub Actions workflows
+# https://docs.zizmor.sh/
+name: Security (zizmor)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ['**']
+
+permissions: {}
+
+jobs:
+  zizmor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@v0.5.2
+        with:
+          advanced-security: false
+          inputs: .github/workflows
