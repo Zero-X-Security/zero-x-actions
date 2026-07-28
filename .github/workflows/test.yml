@@ -1,0 +1,27 @@
+name: Test action
+
+on:
+  pull_request:
+    branches:
+      - '**'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run Zero-X Security Scan action
+        uses: ./
+        with:
+          zerox-api-key: ${{ secrets.ZEROX_API_KEY }}
+          zerox-url: ${{ secrets.ZEROX_URL }}
+          # Optionally override scanners / metadata here if needed
+          # scanners: 'vulns,iac,sast,malware,sbom'
+

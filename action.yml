@@ -12,12 +12,16 @@ inputs:
     description: 'Platform API key from Zero-X Cloud (Settings → API Keys)'
     required: true
   zerox-url:
-    description: 'Zero-X platform base URL (e.g. https://app.zero-x.cloud)'
+    description: 'Zero-X platform base URL'
     required: true
   scanners:
     description: 'Comma-separated list: vulns, iac, sast, malware, sbom (default all)'
     required: false
     default: 'vulns,iac,sast,malware,sbom'
+  provider-type:
+    description: 'Zero-X datasource provider type (default: github)'
+    required: false
+    default: 'github'
   branch-name:
     description: 'Branch name (default: github.ref_name)'
     required: false
@@ -28,7 +32,7 @@ inputs:
     description: 'URL to the workflow run (optional)'
     required: false
   repo-name:
-    description: 'Repository name (default: github.repository)'
+    description: 'Repository name / full name used for Zero-X pre-check (default: github.repository)'
     required: false
   repo-owner:
     description: 'Repository owner (default: github.repository_owner)'

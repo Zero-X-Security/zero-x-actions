@@ -8,6 +8,9 @@ on:
     paths-ignore:
       - '**.md'
       - '.gitignore'
+  pull_request:
+    branches:
+      - '**'
 
 jobs:
   build:
@@ -29,8 +32,10 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Verify dist
+      - name: Verify dist is up to date
         run: |
-          test -f dist/index.js || (echo "dist/index.js missing" && exit 1)
-          test -f dist/main.js || (echo "dist/main.js missing" && exit 1)
-          test -f dist/api.js || (echo "dist/api.js missing" && exit 1)
+          if [ "$(git diff --ignore-space-at-eol dist/ | wc -l)" -gt "0" ]; then
+            echo "Detected uncommitted changes in dist/ after build. See diff below:"
+            git diff dist/
+            exit 1
+          fi
