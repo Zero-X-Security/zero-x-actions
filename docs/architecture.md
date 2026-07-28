@@ -35,7 +35,7 @@ At a high level:
   - `getScanStatus(scanId)` – `GET /tenant/scan/{scanId}/report`.
 
 - `dist/*.js`  
-  Compiled JavaScript output (`index.js`, `main.js`, `api.js`) produced by TypeScript. The GitHub Action runtime executes `dist/index.js`.
+  ncc-bundled output. The GitHub Action runtime executes the single file `dist/index.js` (dependencies like `@actions/core` are inlined).
 
 ## Runtime behavior
 

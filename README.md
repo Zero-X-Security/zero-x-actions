@@ -78,7 +78,7 @@ npm run build
 ```
 
 - `npm ci` installs dependencies in a clean, reproducible way based on `package-lock.json`.
-- `npm run build` compiles TypeScript from `src/` to JavaScript in `dist/`.
+- `npm run build` bundles TypeScript with `@vercel/ncc` into `dist/index.js` (includes `@actions/core`).
 - The GitHub Action entry point is `dist/index.js` (as declared in `action.yml`).
 
 Optional quality checks:

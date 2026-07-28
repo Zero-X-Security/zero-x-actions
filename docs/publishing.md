@@ -9,10 +9,10 @@ Step-by-step guide to publish **zero-x-actions** as a reusable GitHub Action (an
 | Item | Value in this repo |
 |------|--------------------|
 | Action metadata | Root [`action.yml`](../action.yml) |
-| Runtime entry | `dist/index.js` (Node 20) |
+| Runtime entry | `dist/index.js` (Node 20, **ncc-bundled** with deps) |
 | Typical consumer ref | `OWNER/zero-x-actions@v1` or `@v1.0.0` |
 
-Consumers do **not** run `npm install` on this repo. They only need a tagged release that includes committed `action.yml` + `dist/`.
+Consumers do **not** run `npm install` on this repo. The committed `dist/index.js` must include dependencies (built with `@vercel/ncc`). Shipping plain `tsc` output without `node_modules` causes `Cannot find module '@actions/core'`.
 
 ---
 
@@ -31,7 +31,7 @@ Consumers do **not** run `npm install` on this repo. They only need a tagged rel
 2. Confirm these exist at the **repository root**:
    - `action.yml`
    - `README.md` (Marketplace uses this as the listing description)
-   - `dist/` with built JavaScript (`index.js`, `main.js`, `api.js`)
+   - `dist/` with the **bundled** JavaScript (`index.js` from `npm run build` / ncc)
 3. Keep workflows only under `.github/workflows/` (not at repo root).
 
 ---
@@ -189,7 +189,8 @@ Consumers on `@v1` pick up the latest `v1.x.x` only after you move the `v1` tag.
 | Problem | Fix |
 |---------|-----|
 | Marketplace checkbox missing | Repo must be **public**; account needs **2FA**; `action.yml` must be valid at root. |
-| Action fails with missing module / old code | Rebuild and **commit** `dist/`, then retag / release. |
+| Action fails with missing module / old code | Rebuild with `npm run build` (ncc bundle), **commit** `dist/`, then retag / release. |
+| `Cannot find module '@actions/core'` | Dist was compiled with `tsc` only. Bundle with ncc so deps are inlined, commit `dist/index.js`, publish a new tag. |
 | CI “dist is out of date” | Run `npm run build`, commit `dist/`, push again. |
 | Consumer cannot find `@v1` | Create/push major tag `v1`, or tell them to use `@v1.0.0`. |
 | Scan fails “repo not available” | Add the consumer repo in Zero-X (**Datasources → GitHub**) before running the action. |

@@ -14,16 +14,23 @@ npm ci
 
 ## 2. Build the action
 
-Compile the TypeScript sources to JavaScript in `dist/`:
+Compile and bundle TypeScript into a single JavaScript file in `dist/`:
 
 ```bash
 npm run build
 ```
 
-This runs `tsc` using `tsconfig.json` with:
+This runs `@vercel/ncc`, which:
+- Compiles `src/index.ts` (and imports)
+- **Bundles dependencies** (including `@actions/core`) into `dist/index.js`
 
-- `rootDir: src`
-- `outDir: dist`
+GitHub Actions runners do **not** run `npm install` for your action, so dependencies must be inside the committed bundle. Do not rely on separate `dist/main.js` / `node_modules`.
+
+Optional type-check only (no emit):
+
+```bash
+npm run typecheck
+```
 
 The GitHub Action runtime uses `dist/index.js` as declared in `action.yml`.
 

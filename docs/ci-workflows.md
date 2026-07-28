@@ -66,10 +66,10 @@ jobs:
   1. Check out the repository.
   2. Set up Node.js 20 with npm caching.
   3. Install dependencies with `npm ci`.
-  4. Build TypeScript with `npm run build` (compiles to `dist/`).
+  4. Build with `npm run build` (ncc bundles `src/` + deps into `dist/index.js`).
   5. Run `git diff --ignore-space-at-eol dist/` and **fail if there are changes**.
 
-This enforces that the **committed `dist/` directory is always in sync** with the TypeScript source. If a contributor changes `src/` but forgets to run the build, CI will fail.
+This enforces that the **committed `dist/` bundle is always in sync** with the TypeScript source and dependencies. If a contributor changes `src/` but forgets to rebuild, CI will fail.
 
 ### 2. `Test action` workflow – run the action on PRs
 
