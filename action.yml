@@ -1,7 +1,7 @@
 # Zero-X GitHub Action - Run security scans in CI and publish results to Zero-X
 # https://github.com/marketplace (publish from Releases)
-name: 'Zero-X Security Scan'
-description: 'Run Semgrep and Trivy in CI and publish results to Zero-X using a platform API key'
+name: 'Zero-X Security Scanner'
+description: 'Perform code security scans using zero-x security platform'
 author: 'Zero-X'
 branding:
   icon: 'shield'
@@ -13,6 +13,7 @@ inputs:
     required: true
   zerox-url:
     description: 'Zero-X platform base URL'
+    default: 'https://in.infimatrix.com'
     required: true
   scanners:
     description: 'Comma-separated list: vulns, iac, sast, malware, sbom (default all)'
@@ -25,21 +26,26 @@ inputs:
   branch-name:
     description: 'Branch name (default: github.ref_name)'
     required: false
+    default: 'main'
   commit-sha:
     description: 'Commit SHA (default: github.sha)'
     required: false
+    default: ${{ github.sha }}
   run-url:
     description: 'URL to the workflow run (optional)'
     required: false
   repo-name:
     description: 'Repository name / full name used for Zero-X pre-check (default: github.repository)'
     required: false
+    default: ${{ github.repository }}
   repo-owner:
     description: 'Repository owner (default: github.repository_owner)'
     required: false
+    default: ${{ github.repository_owner }}
   repo-url:
     description: 'Repository URL (default: github.repository_url)'
     required: false
+    default: ${{ github.repository_url }}
 
 outputs:
   scanResultUrl:
