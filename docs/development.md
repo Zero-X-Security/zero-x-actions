@@ -66,6 +66,8 @@ To make these PR checks pass, configure the following repository secrets in GitH
 - `ZEROX_API_KEY` – Zero-X platform API key.
 - `ZEROX_URL` – Zero-X base URL (e.g. `https://app.zero-x.cloud`).
 
+Also create a GitHub Environment named `zerox-ci` (**Settings → Environments**) used by the Test action workflow. Prefer storing `ZEROX_*` as Environment secrets on `zerox-ci`.
+
 ### 4.2 Testing in a consumer repository
 
 To exercise the action in a real pipeline, in another repository:

@@ -103,9 +103,10 @@ There are two main ways to validate the project:
    - `Test action` workflow checks out the repo and runs `uses: ./` with `ZEROX_API_KEY` and `ZEROX_URL` secrets.
    - `Security (zizmor)` workflow scans `.github/workflows` for security issues.
 
-   Configure repo secrets:
+   Configure repo secrets (prefer Environment `zerox-ci`):
    - `ZEROX_API_KEY` – Zero-X API key.
    - `ZEROX_URL` – Zero-X base URL.
+   - Create Environment **zerox-ci** under Settings → Environments (required by Test action).
 
 2. **In a consumer repository**  
    Publish or reference a version of this action (e.g. `zero-x-security/zero-x-actions@v1`) and use it in a workflow as shown in the Usage section above.

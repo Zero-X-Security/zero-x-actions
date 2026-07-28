@@ -5,15 +5,17 @@ on:
     branches:
       - '**'
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    environment: zerox-ci
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
@@ -24,4 +26,3 @@ jobs:
           zerox-url: ${{ secrets.ZEROX_URL }}
           # Optionally override scanners / metadata here if needed
           # scanners: 'vulns,iac,sast,malware,sbom'
-

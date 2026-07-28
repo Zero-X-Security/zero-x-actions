@@ -23,16 +23,20 @@ on:
     branches:
       - '**'
 
+permissions: {}
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -71,7 +75,7 @@ This enforces that the **committed `dist/` directory is always in sync** with th
 
 **File:** `.github/workflows/test.yml`
 
-```1:27:/home/pranav/Desktop/Data/Projects/nodejs/zero-x-actions/.github/workflows/test.yml
+```1:28:/home/pranav/Desktop/Data/Projects/nodejs/zero-x-actions/.github/workflows/test.yml
 name: Test action
 
 on:
@@ -79,15 +83,17 @@ on:
     branches:
       - '**'
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    environment: zerox-ci
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
@@ -104,14 +110,15 @@ jobs:
 
 - **Trigger:** Any `pull_request`.
 - **Job:**
+  - Runs in the GitHub Environment `zerox-ci` (create it under **Settings → Environments**).
   - Checks out the repo.
   - Runs the repository **as a GitHub Action** (`uses: ./`).
-  - Provides `zerox-api-key` and `zerox-url` from repository secrets.
+  - Provides `zerox-api-key` and `zerox-url` from secrets (prefer Environment secrets on `zerox-ci`).
 - **Purpose:**
   - Validates that the action can run end-to-end with real inputs.
   - Surfaces regressions in scan orchestration before merges.
 
-To make this workflow pass, configure the following repository secrets:
+To make this workflow pass, configure the following (Environment secrets on `zerox-ci`, or repository secrets):
 
 - `ZEROX_API_KEY` – Zero-X platform API key.
 - `ZEROX_URL` – Zero-X base URL (e.g. `https://app.zero-x.cloud`).
@@ -120,7 +127,7 @@ To make this workflow pass, configure the following repository secrets:
 
 **File:** `.github/workflows/secure.yml`
 
-```1:23:/home/pranav/Desktop/Data/Projects/nodejs/zero-x-actions/.github/workflows/secure.yml
+```1:29:/home/pranav/Desktop/Data/Projects/nodejs/zero-x-actions/.github/workflows/secure.yml
 # Run zizmor to find and fix security issues in GitHub Actions workflows
 # https://docs.zizmor.sh/
 name: Security (zizmor)
@@ -141,12 +148,12 @@ jobs:
       actions: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
       - name: Run zizmor
-        uses: zizmorcore/zizmor-action@v0.5.2
+        uses: zizmorcore/zizmor-action@71321a20a9ded102f6e9ce5718a2fcec2c4f70d8 # v0.5.2
         with:
           advanced-security: false
           inputs: .github/workflows
