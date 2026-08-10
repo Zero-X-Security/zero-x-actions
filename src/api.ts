@@ -82,6 +82,71 @@ interface ScanReport {
   target?: string;
 }
 
+export interface SecurityFindingListItem {
+  findingId?: string;
+  resourceId?: string;
+  title?: string;
+  resource?: string;
+  resourceName?: string;
+  resourceType?: string;
+  severity?: string;
+  category?: string;
+  riskScore?: number;
+  provider?: string;
+  description?: string;
+  checkId?: string;
+  branchName?: string;
+  vulnerabilityId?: string;
+  cweId?: string;
+  datasourceName?: string;
+  datasourceId?: string;
+  status?: string;
+}
+
+export interface SecurityFindingDetails {
+  title?: string;
+  description?: string;
+  severity?: string;
+  category?: string;
+  riskScore?: number;
+  resourceName?: string;
+  resourceType?: string;
+  vulnerabilityId?: string;
+  cvssScore?: number;
+  filePath?: string;
+  line?: number;
+  cweWithDescription?: string;
+  checkId?: string;
+  findingType?: string;
+  dataSourceName?: string;
+  datasourceId?: string;
+  repoName?: string;
+  branchName?: string;
+  status?: string;
+  pkgName?: string;
+  installedVersion?: string;
+  fixedVersion?: string;
+}
+
+export interface ListFindingsParams {
+  repository?: string;
+  datasourceName?: string;
+  pageNumber?: number;
+  pageSize?: number;
+}
+
+interface PaginationDto {
+  pageNumber?: number;
+  pageSize?: number;
+  totalRecords?: number;
+  totalPages?: number;
+}
+
+interface FindingsListEnvelope {
+  data?: SecurityFindingListItem[];
+  paginationDto?: PaginationDto;
+}
+
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, '');
 }
@@ -329,6 +394,58 @@ export function createZeroXClient(baseUrl: string, apiKey: string) {
         status: normalizeScanStatus(report?.status),
         scanId: report?.scanId ?? scanId,
       };
+    },
+
+    async listSecurityFindings(
+      params: ListFindingsParams,
+    ): Promise<{
+      findings: SecurityFindingListItem[];
+      totalPages: number;
+      totalRecords: number;
+    }> {
+      const query = new URLSearchParams();
+      query.set('pageNumber', String(params.pageNumber ?? 1));
+      query.set('pageSize', String(params.pageSize ?? 100));
+      if (params.repository) {
+        query.append('repository', params.repository);
+      }
+      if (params.datasourceName) {
+        query.append('datasourceName', params.datasourceName);
+      }
+
+      const envelope = await request<FindingsListEnvelope>(
+        baseUrl,
+        apiKey,
+        `/tenant/security-findings/security-findings-list?${query.toString()}`,
+        { method: 'GET' },
+      );
+
+      const findings = Array.isArray(envelope?.data)
+        ? envelope.data
+        : Array.isArray(envelope)
+          ? (envelope as unknown as SecurityFindingListItem[])
+          : [];
+
+      return {
+        findings,
+        totalPages: envelope?.paginationDto?.totalPages ?? 1,
+        totalRecords: envelope?.paginationDto?.totalRecords ?? findings.length,
+      };
+    },
+
+    async getSecurityFindingDetails(
+      findingId: string,
+      category?: string,
+    ): Promise<SecurityFindingDetails> {
+      const query = new URLSearchParams();
+      if (category) {
+        query.set('category', category);
+      }
+      const qs = query.toString();
+      const path = `/tenant/security-findings/get-security-findings-details/${encodeURIComponent(findingId)}${qs ? `?${qs}` : ''}`;
+      return requestData<SecurityFindingDetails>(baseUrl, apiKey, path, {
+        method: 'GET',
+      });
     },
   };
 }

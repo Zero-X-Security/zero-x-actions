@@ -1,6 +1,6 @@
 # Zero-X Security Scan (GitHub Action)
 
-Trigger security scans on [Zero-X Cloud](https://app.zero-x.cloud) from your GitHub Actions workflow. The action starts a scan via the Zero-X API, polls until it completes, and outputs a link to the scan results.
+Trigger security scans on [Zero-X Cloud](https://app.zero-x.cloud) from your GitHub Actions workflow. The action starts a scan via the Zero-X API, polls until it completes, exports findings as SARIF, and uploads them to **GitHub Code Scanning** so they appear under the repository **Security** tab.
 
 For a deeper technical overview, see:
 
@@ -12,8 +12,9 @@ For a deeper technical overview, see:
 ## Prerequisites
 
 1. **Platform API key** – In Zero-X Cloud go to **Settings → API Keys**, create a key (e.g. "GitHub Actions"), and copy it. Store it as a GitHub secret (e.g. `ZEROX_API_KEY`). The action sends this value in the `api-key` HTTP header.
-2. **Zero-X URL** – Your Zero-X platform base URL (e.g. `https://app.zero-x.cloud` or `https://qa.zero-x.cloud`). Store as a secret `ZEROX_URL` or pass as input.
+2. **Zero-X URL** – Your Zero-X platform base URL (e.g. `https://in.zero-x.cloud` or `https://qa.zero-x.cloud`). Store as a secret `ZEROX_URL` or pass as input.
 3. **Repository added in Zero-X** – The GitHub repository must already be connected/added under **Datasources → GitHub** in Zero-X Cloud. The action pre-checks availability and fails with a setup note if the repo is missing.
+4. **GitHub Code Scanning** – Enable Code scanning for the consumer repo (public repos: free; private repos: GitHub Advanced Security). The workflow needs `security-events: write`.
 
 ## Usage
 
@@ -23,28 +24,37 @@ Add a job to your workflow:
 jobs:
   zerox-scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Zero-X Security Scan
         id: zerox
-        uses: zero-x-security/zero-x-actions@v1
+        uses: zero-x-security/zero-x-actions@v1.0.2
         with:
           zerox-api-key: ${{ secrets.ZEROX_API_KEY }}
           zerox-url: ${{ secrets.ZEROX_URL }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           # Optional overrides:
+          # upload-to-github: 'true'
           # scanners: 'vulns,iac,sast,malware,sbom'
           # provider-type: github
           # branch-name: ${{ github.ref_name }}
           # commit-sha: ${{ github.sha }}
-          # run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           # repo-name: ${{ github.repository }}
-          # repo-owner: ${{ github.repository_owner }}
-          # repo-url: ${{ github.server_url }}/${{ github.repository }}
 
       - name: Open scan results
-        run: echo "Results: ${{ steps.zerox.outputs.scanResultUrl }}"
+        run: |
+          echo "Outcome: ${{ steps.zerox.outputs.outcome }}"
+          echo "Zero-X: ${{ steps.zerox.outputs.scanResultUrl }}"
+          echo "SARIF: ${{ steps.zerox.outputs.sarifPath }}"
 ```
+
+After a successful run, open the repo **Security** tab → **Code scanning** (under Security and quality) to review alerts.
+
+> Note: Findings appear under **Code scanning**, not Dependabot vulnerability alerts. GitHub does not allow third-party tools to write Dependabot alerts.
 
 ### Inputs
 
@@ -55,11 +65,13 @@ jobs:
 | `scanners` | No | `vulns,iac,sast,malware,sbom` | Comma-separated list: `vulns`, `iac`, `sast`, `malware`, `sbom`. |
 | `provider-type` | No | `github` | Datasource provider type used for pre-check and scan execution. |
 | `branch-name` | No | `github.ref_name` | Branch name sent to Zero-X. |
-| `commit-sha` | No | `github.sha` | Commit SHA (reserved for metadata; scan API uses branch). |
+| `commit-sha` | No | `github.sha` | Commit SHA used for Code Scanning SARIF upload. |
 | `run-url` | No | Workflow run URL | URL to the GitHub Actions run. |
 | `repo-name` | No | `github.repository` | Repository full name (`owner/repo`) used for Zero-X availability pre-check. |
 | `repo-owner` | No | `github.repository_owner` | Repository owner. |
 | `repo-url` | No | `github.repository_url`-style | Repository URL. |
+| `upload-to-github` | No | `true` | Upload SARIF findings to GitHub Code Scanning. |
+| `github-token` | No | `GITHUB_TOKEN` | Token with `security-events: write`. |
 
 ### Outputs
 
@@ -67,6 +79,7 @@ jobs:
 |--------|-------------|
 | `scanResultUrl` | Link to the scan results in Zero-X Cloud. |
 | `outcome` | Scan outcome: `success`, `failure`, or `timeout`. |
+| `sarifPath` | Path to the generated `zerox-results.sarif` file. |
 
 ## Development – how to start and run the project
 
@@ -109,7 +122,7 @@ There are two main ways to validate the project:
    - Create Environment **zerox-ci** under Settings → Environments (required by Test action).
 
 2. **In a consumer repository**  
-   Publish or reference a version of this action (e.g. `zero-x-security/zero-x-actions@v1`) and use it in a workflow as shown in the Usage section above.
+   Publish or reference a version of this action (e.g. `zero-x-security/zero-x-actions@v1.0.2`) and use it in a workflow as shown in the Usage section above.
 
 For more details on the CI workflows, see [docs/ci-workflows.md](docs/ci-workflows.md).
 
@@ -120,6 +133,6 @@ See **[`docs/publishing.md`](docs/publishing.md)** for the full step-by-step gui
 Short version:
 
 1. Build and commit `dist/` (`npm ci && npm run build`).
-2. Create a release tag (e.g. `v1.0.0`) and publish a **GitHub Release**.
+2. Create a release tag (e.g. `v1.0.2`) and publish a **GitHub Release**.
 3. Optionally check **Publish this Action to the GitHub Marketplace** (public repo + 2FA required).
-4. Consumers use `YOUR_ORG/zero-x-actions@v1` or `@v1.0.0`.
+4. Consumers use `YOUR_ORG/zero-x-actions@v1.0.2` or `@v1`.

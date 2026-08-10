@@ -75,7 +75,7 @@ This enforces that the **committed `dist/` bundle is always in sync** with the T
 
 **File:** `.github/workflows/test.yml`
 
-```1:28:/home/pranav/Desktop/Data/Projects/nodejs/zero-x-actions/.github/workflows/test.yml
+```1:32:/home/pranav/Desktop/Data/Projects/nodejs/zero-x-actions/.github/workflows/test.yml
 name: Test action
 
 on:
@@ -91,6 +91,7 @@ jobs:
     environment: zerox-ci
     permissions:
       contents: read
+      security-events: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -102,6 +103,7 @@ jobs:
         with:
           zerox-api-key: ${{ secrets.ZEROX_API_KEY }}
           zerox-url: ${{ secrets.ZEROX_URL }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           # Optionally override scanners / metadata here if needed
           # scanners: 'vulns,iac,sast,malware,sbom'
 ```
@@ -113,15 +115,17 @@ jobs:
   - Runs in the GitHub Environment `zerox-ci` (create it under **Settings → Environments**).
   - Checks out the repo.
   - Runs the repository **as a GitHub Action** (`uses: ./`).
-  - Provides `zerox-api-key` and `zerox-url` from secrets (prefer Environment secrets on `zerox-ci`).
+  - Provides `zerox-api-key` / `zerox-url` from secrets and `github-token` for SARIF upload.
+  - Uses `security-events: write` so findings can appear under Code scanning.
 - **Purpose:**
-  - Validates that the action can run end-to-end with real inputs.
-  - Surfaces regressions in scan orchestration before merges.
+  - Validates scan orchestration and GitHub Security upload before merges.
 
 To make this workflow pass, configure the following (Environment secrets on `zerox-ci`, or repository secrets):
 
 - `ZEROX_API_KEY` – Zero-X platform API key.
 - `ZEROX_URL` – Zero-X base URL (e.g. `https://app.zero-x.cloud`).
+
+Ensure Code scanning is enabled on this repository if you want the upload step to succeed.
 
 ### 3. `Security (zizmor)` workflow – workflow security checks
 
@@ -171,7 +175,7 @@ Given this setup, you can validate the project in three layers:
 1. **Local build & lint** – ensure TypeScript compiles and code style is clean (see `docs/development.md`).
 2. **Pull request CI** – open a PR in GitHub; the following will run:
    - `Publish` (build + dist verification).
-   - `Test action` (runs the action with Zero-X secrets).
+   - `Test action` (runs the action with Zero-X secrets + SARIF upload permissions).
    - `Security (zizmor)` (checks workflow security).
-3. **Consumer workflow** – in a separate repository, use `zero-x-security/zero-x-actions@v1` in a real pipeline to confirm behavior in your own environment.
+3. **Consumer workflow** – in a separate repository, use `zero-x-security/zero-x-actions@v1.0.2` with `security-events: write` and confirm alerts under Security → Code scanning.
 
