@@ -1,14 +1,37 @@
 import * as core from '@actions/core';
-import { createZeroXClient } from './api';
+import * as fs from 'fs';
+import * as path from 'path';
+import {
+  createZeroXClient,
+  type SecurityFindingListItem,
+  type MatchedDatasource,
+} from './api';
+import {
+  parseOwnerRepo,
+  resolveGitRef,
+  uploadSarifToCodeScanning,
+} from './github';
+import { buildSarif, type FindingForSarif } from './sarif';
 
 const POLL_INTERVAL_MS = 10_000;
 const MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes
+const FINDINGS_PAGE_SIZE = 100;
+const MAX_FINDING_DETAILS = 500;
+const SARIF_FILENAME = 'zerox-results.sarif';
 
 function parseScanners(raw: string): string[] {
   return raw
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function parseBool(raw: string, defaultValue: boolean): boolean {
+  if (!raw) return defaultValue;
+  const value = raw.trim().toLowerCase();
+  if (['true', '1', 'yes', 'y'].includes(value)) return true;
+  if (['false', '0', 'no', 'n'].includes(value)) return false;
+  return defaultValue;
 }
 
 function repoUnavailableMessage(repoName: string, baseUrl: string): string {
@@ -21,6 +44,173 @@ function repoUnavailableMessage(repoName: string, baseUrl: string): string {
   ].join('\n');
 }
 
+async function collectFindings(
+  client: ReturnType<typeof createZeroXClient>,
+  matched: MatchedDatasource,
+  repoName: string,
+): Promise<FindingForSarif[]> {
+  const listItems: SecurityFindingListItem[] = [];
+  let page = 1;
+  let totalPages = 1;
+
+  do {
+    const pageResult = await client.listSecurityFindings({
+      repository: repoName,
+      datasourceName: matched.name,
+      pageNumber: page,
+      pageSize: FINDINGS_PAGE_SIZE,
+    });
+    listItems.push(...pageResult.findings);
+    totalPages = Math.max(1, pageResult.totalPages);
+    page += 1;
+  } while (page <= totalPages && listItems.length < MAX_FINDING_DETAILS);
+
+  if (listItems.length === 0) {
+    // Retry with short name only (some tenants store repo without owner)
+    const shortName = repoName.includes('/')
+      ? repoName.split('/').pop()!
+      : repoName;
+    if (shortName !== repoName) {
+      const pageResult = await client.listSecurityFindings({
+        repository: shortName,
+        datasourceName: matched.name,
+        pageNumber: 1,
+        pageSize: FINDINGS_PAGE_SIZE,
+      });
+      listItems.push(...pageResult.findings);
+    }
+  }
+
+  const capped = listItems.slice(0, MAX_FINDING_DETAILS);
+  if (listItems.length > MAX_FINDING_DETAILS) {
+    core.warning(
+      `Truncating finding details to ${MAX_FINDING_DETAILS} of ${listItems.length} for SARIF export.`,
+    );
+  }
+
+  const enriched: FindingForSarif[] = [];
+  for (const item of capped) {
+    const findingId = item.findingId;
+    if (!findingId) continue;
+
+    let details;
+    try {
+      details = await client.getSecurityFindingDetails(
+        findingId,
+        item.category,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      core.warning(
+        `Could not load details for finding ${findingId}: ${message}`,
+      );
+    }
+
+    enriched.push({ findingId, list: item, details });
+  }
+
+  return enriched;
+}
+
+async function publishFindingsToGitHub(params: {
+  client: ReturnType<typeof createZeroXClient>;
+  matched: MatchedDatasource;
+  repoName: string;
+  baseUrlNormalized: string;
+  uploadToGithub: boolean;
+  githubToken?: string;
+  branchName?: string;
+}): Promise<void> {
+  let findings: FindingForSarif[] = [];
+  try {
+    findings = await collectFindings(
+      params.client,
+      params.matched,
+      params.repoName,
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    core.warning(`Failed to fetch Zero-X findings for SARIF: ${message}`);
+    return;
+  }
+
+  core.info(`Fetched ${findings.length} Zero-X finding(s) for SARIF export`);
+
+  const sarif = buildSarif(findings, {
+    informationUri: params.baseUrlNormalized,
+  });
+  const sarifJson = JSON.stringify(sarif, null, 2);
+
+  const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
+  const sarifPath = path.join(workspace, SARIF_FILENAME);
+  fs.writeFileSync(sarifPath, sarifJson, 'utf8');
+  core.setOutput('sarifPath', sarifPath);
+  core.info(`Wrote SARIF: ${sarifPath}`);
+
+  if (!params.uploadToGithub) {
+    core.info('Skipping GitHub Code Scanning upload (upload-to-github=false)');
+    return;
+  }
+
+  if (findings.length === 0) {
+    core.info(
+      'No findings to upload; skipping GitHub Code Scanning upload.',
+    );
+    return;
+  }
+
+  const token = params.githubToken || process.env.GITHUB_TOKEN;
+  if (!token) {
+    core.setOutput('outcome', 'failure');
+    core.setFailed(
+      'upload-to-github is true but no github-token / GITHUB_TOKEN was provided. Add permissions.security-events: write and pass github-token: ${{ secrets.GITHUB_TOKEN }}.',
+    );
+    return;
+  }
+
+  const ownerRepo =
+    parseOwnerRepo(params.repoName) ||
+    parseOwnerRepo(process.env.GITHUB_REPOSITORY);
+  if (!ownerRepo) {
+    core.setOutput('outcome', 'failure');
+    core.setFailed(
+      'Cannot determine GitHub owner/repo for Code Scanning upload.',
+    );
+    return;
+  }
+
+  const commitSha =
+    core.getInput('commit-sha') || process.env.GITHUB_SHA || '';
+  if (!commitSha) {
+    core.setOutput('outcome', 'failure');
+    core.setFailed(
+      'Cannot upload SARIF without commit SHA (set commit-sha or GITHUB_SHA).',
+    );
+    return;
+  }
+
+  const ref = resolveGitRef(process.env.GITHUB_REF, params.branchName);
+
+  try {
+    const upload = await uploadSarifToCodeScanning({
+      token,
+      owner: ownerRepo.owner,
+      repo: ownerRepo.repo,
+      sarifJson,
+      commitSha,
+      ref,
+      apiUrl: process.env.GITHUB_API_URL,
+    });
+    core.info(
+      `Uploaded SARIF to GitHub Code Scanning${upload.id ? ` (id: ${upload.id})` : ''}. Findings appear under Security → Code scanning.`,
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    core.setOutput('outcome', 'failure');
+    core.setFailed(message);
+  }
+}
+
 export async function run(): Promise<void> {
   const apiKey = core.getInput('zerox-api-key', { required: true });
   const baseUrl = core.getInput('zerox-url', { required: true });
@@ -31,6 +221,9 @@ export async function run(): Promise<void> {
   const branchName =
     core.getInput('branch-name') || process.env.GITHUB_REF_NAME;
   const repoName = core.getInput('repo-name') || process.env.GITHUB_REPOSITORY;
+  const uploadToGithub = parseBool(core.getInput('upload-to-github'), true);
+  const githubToken =
+    core.getInput('github-token') || process.env.GITHUB_TOKEN;
 
   if (!repoName) {
     core.setOutput('outcome', 'failure');
@@ -43,7 +236,7 @@ export async function run(): Promise<void> {
   const client = createZeroXClient(baseUrl, apiKey);
   const baseUrlNormalized = baseUrl.replace(/\/+$/, '');
 
-  let matched;
+  let matched: MatchedDatasource | null;
   try {
     matched = await client.findRepoDatasource(repoName, providerType);
   } catch (err) {
@@ -143,4 +336,14 @@ export async function run(): Promise<void> {
   core.setOutput('scanResultUrl', resultUrl);
   core.setOutput('outcome', 'success');
   core.info(`Scan completed. Results: ${resultUrl}`);
+
+  await publishFindingsToGitHub({
+    client,
+    matched,
+    repoName,
+    baseUrlNormalized,
+    uploadToGithub,
+    githubToken,
+    branchName,
+  });
 }

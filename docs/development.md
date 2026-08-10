@@ -21,7 +21,7 @@ npm run build
 ```
 
 This runs `@vercel/ncc`, which:
-- Compiles `src/index.ts` (and imports)
+- Compiles `src/index.ts` (and imports: `main`, `api`, `sarif`, `github`)
 - **Bundles dependencies** (including `@actions/core`) into `dist/index.js`
 
 GitHub Actions runners do **not** run `npm install` for your action, so dependencies must be inside the committed bundle. Do not rely on separate `dist/main.js` / `node_modules`.
@@ -48,7 +48,7 @@ Format the code with Prettier:
 npm run format
 ```
 
-These commands only affect the source under `src/` and do not change the compiled output directly.
+These commands only affect the source under `src/` and do not change the compiled output directly. Re-run `npm run build` after source changes so `dist/` stays in sync.
 
 ## 4. Running and testing the action
 
@@ -65,6 +65,8 @@ When you open or update a pull request on GitHub:
   - Checks out the repo and runs `uses: ./` with:
     - `zerox-api-key: ${{ secrets.ZEROX_API_KEY }}`
     - `zerox-url: ${{ secrets.ZEROX_URL }}`
+    - `github-token: ${{ secrets.GITHUB_TOKEN }}`
+  - Requires `security-events: write` so SARIF can upload to Code Scanning.
 - The **Security (zizmor)** workflow:
   - Scans `.github/workflows` for security issues.
 
@@ -79,25 +81,30 @@ Also create a GitHub Environment named `zerox-ci` (**Settings → Environments**
 
 To exercise the action in a real pipeline, in another repository:
 
-1. Publish a version of this action (see the README section on publishing).
+1. Publish a version of this action (see [`docs/publishing.md`](publishing.md)), currently **`v1.0.2`**.
 2. Reference it from a workflow:
 
    ```yaml
    jobs:
      zerox-scan:
        runs-on: ubuntu-latest
+       permissions:
+         contents: read
+         security-events: write
        steps:
          - uses: actions/checkout@v4
 
          - name: Zero-X Security Scan
            id: zerox
-           uses: zero-x-security/zero-x-actions@v1
+           uses: zero-x-security/zero-x-actions@v1.0.2
            with:
              zerox-api-key: ${{ secrets.ZEROX_API_KEY }}
              zerox-url: ${{ secrets.ZEROX_URL }}
+             github-token: ${{ secrets.GITHUB_TOKEN }}
    ```
 
-3. Inspect the resulting `scanResultUrl` and `outcome` outputs in the job logs.
+3. Inspect outputs in the job logs: `scanResultUrl`, `outcome`, `sarifPath`.
+4. Open the consumer repo **Security → Code scanning** to confirm alerts appear.
 
 ### 4.3 Optional: local workflow runner
 
@@ -107,4 +114,3 @@ If you want to approximate GitHub Actions behavior locally, you can use a tool l
 - The `uses: ./` execution in `test.yml`.
 
 Note that you will need to provide local secrets (`ZEROX_API_KEY`, `ZEROX_URL`) when running workflows with `act`.
-

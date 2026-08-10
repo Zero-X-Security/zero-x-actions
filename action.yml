@@ -1,7 +1,7 @@
 # Zero-X GitHub Action - Run security scans in CI and publish results to Zero-X
 # https://github.com/marketplace (publish from Releases)
 name: 'Zero-X Security Scanner'
-description: 'Perform code security scans using zero-x security platform'
+description: 'Perform code security scans using zero-x security platform and publish findings to GitHub Code Scanning'
 author: 'Zero-X'
 branding:
   icon: 'shield'
@@ -28,30 +28,35 @@ inputs:
     required: false
     default: 'main'
   commit-sha:
-    description: 'Commit SHA (default: github.sha)'
+    description: 'Commit SHA for Code Scanning upload (default: github.sha)'
     required: false
-    default: ${{ github.sha }}
   run-url:
     description: 'URL to the workflow run (optional)'
     required: false
   repo-name:
     description: 'Repository name / full name used for Zero-X pre-check (default: github.repository)'
     required: false
-    default: ${{ github.repository }}
   repo-owner:
     description: 'Repository owner (default: github.repository_owner)'
     required: false
-    default: ${{ github.repository_owner }}
   repo-url:
     description: 'Repository URL (default: github.repository_url)'
     required: false
-    default: ${{ github.repository_url }}
+  upload-to-github:
+    description: 'Upload findings as SARIF to GitHub Code Scanning (Security tab)'
+    required: false
+    default: 'true'
+  github-token:
+    description: 'GitHub token with security-events: write (default: GITHUB_TOKEN)'
+    required: false
 
 outputs:
   scanResultUrl:
     description: 'A link to the scan results in Zero-X Cloud.'
   outcome:
     description: 'Scan outcome (e.g. success, failure).'
+  sarifPath:
+    description: 'Path to the generated SARIF file uploaded to GitHub Code Scanning.'
 
 runs:
   using: 'node20'

@@ -9,46 +9,57 @@ At a high level:
 - A workflow in a consumer repository uses `zero-x-security/zero-x-actions`.
 - The action reads configuration (Zero-X URL, API key, scanners, repository metadata).
 - It **pre-checks** that the repository exists in Zero-X (Datasources), then starts a scan and polls until completion.
-- It exposes the scan result URL and outcome as action outputs.
+- After success, it fetches findings, converts them to **SARIF 2.1.0**, and uploads to **GitHub Code Scanning** (Security tab).
+- It exposes the scan result URL, outcome, and SARIF path as action outputs.
 
 ## Code structure
 
 - `action.yml`  
-  Declares the GitHub Action: inputs (Zero-X API key, URL, scanners, provider type, metadata) and outputs (`scanResultUrl`, `outcome`), plus runtime (`node20`, `dist/index.js`).
+  Declares the GitHub Action: inputs (Zero-X API key, URL, scanners, provider type, upload flags, metadata) and outputs (`scanResultUrl`, `outcome`, `sarifPath`), plus runtime (`node20`, `dist/index.js`).
 
 - `src/index.ts`  
   Thin entry point that calls the main runner and handles top-level errors.
 
 - `src/main.ts`  
   Core orchestration:
-  - Reads inputs via `@actions/core` (API key, URL, scanners, provider type, branch/repo metadata).
+  - Reads inputs via `@actions/core`.
   - Builds a client using `createZeroXClient` from `api.ts`.
   - Pre-checks repo availability; fails early with a setup note if missing.
   - Starts a scan and periodically polls each scan report.
-  - Interprets the scan result, sets outputs (`scanResultUrl`, `outcome`), and fails the action on error.
+  - On success: fetches findings, writes `zerox-results.sarif`, uploads to Code Scanning when enabled.
 
 - `src/api.ts`  
   Zero-X tenant API client (public OpenAPI):
   - Auth via `api-key` header.
-  - `findRepoDatasource(...)` – `GET /tenant/datasource/datasource-list` + `GET /tenant/datasource/datasource-details/{id}`.
-  - `startScan(...)` – `POST /tenant/scan/execution`.
-  - `getScanStatus(scanId)` – `GET /tenant/scan/{scanId}/report`.
+  - `findRepoDatasource(...)` – datasource list + details.
+  - `startScan(...)` / `getScanStatus(scanId)`.
+  - `listSecurityFindings(...)` / `getSecurityFindingDetails(findingId)`.
+
+- `src/sarif.ts`  
+  Maps Zero-X findings to SARIF 2.1.0 (rules, severity levels, file/line locations).
+
+- `src/github.ts`  
+  Uploads gzip+base64 SARIF to `POST /repos/{owner}/{repo}/code-scanning/sarifs`.
 
 - `dist/*.js`  
-  ncc-bundled output. The GitHub Action runtime executes the single file `dist/index.js` (dependencies like `@actions/core` are inlined).
+  ncc-bundled output. The GitHub Action runtime executes the single file `dist/index.js`.
 
 ## Runtime behavior
 
 When the action runs in a workflow:
 
 1. GitHub Actions runner executes `node dist/index.js`.
-2. The code reads required inputs:
-   - `zerox-api-key` and `zerox-url` must be provided (typically from GitHub secrets).
-   - Optional inputs (scanners, provider type, branch name, repo metadata) default from the GitHub context if not provided.
-3. **Pre-check:** looks up the repository in Zero-X datasources. If not found, sets `outcome=failure` and fails with a note to add the repo under Datasources → GitHub.
-4. A scan is started on Zero-X Cloud (`/tenant/scan/execution`), and the action polls each scan report until:
-   - All scanners complete successfully (sets `outcome=success` and `scanResultUrl`).
-   - Any scanner fails (sets `outcome=failure`, sets `scanResultUrl` if available, marks the action as failed).
-   - A timeout or unexpected error occurs (marks the action as failed and surfaces the error message).
+2. The code reads required inputs (`zerox-api-key`, `zerox-url`) and optional metadata.
+3. **Pre-check:** looks up the repository in Zero-X datasources. If not found, fails with a setup note.
+4. A scan is started and polled until completion, failure, or timeout.
+5. On success:
+   - Findings are loaded from `/tenant/security-findings/...`.
+   - SARIF is written to the workspace (`zerox-results.sarif`).
+   - If `upload-to-github` is true, SARIF is uploaded to GitHub Code Scanning (requires `security-events: write`).
+6. Outputs: `scanResultUrl`, `outcome`, `sarifPath`.
 
-This design keeps the business logic isolated in `main.ts` and `api.ts` while the surrounding CI workflows and configuration handle distribution and validation.
+Findings appear under the consumer repo **Security → Code scanning** (Security and quality). They do **not** appear under Dependabot vulnerability alerts.
+
+Current published version for consumers: **`v1.0.2`**.
+
+This design keeps the business logic isolated in `main.ts`, `api.ts`, `sarif.ts`, and `github.ts` while CI workflows handle distribution and validation.

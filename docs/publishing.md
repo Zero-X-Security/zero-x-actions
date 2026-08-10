@@ -10,9 +10,11 @@ Step-by-step guide to publish **zero-x-actions** as a reusable GitHub Action (an
 |------|--------------------|
 | Action metadata | Root [`action.yml`](../action.yml) |
 | Runtime entry | `dist/index.js` (Node 20, **ncc-bundled** with deps) |
-| Typical consumer ref | `OWNER/zero-x-actions@v1` or `@v1.0.0` |
+| Typical consumer ref | `OWNER/zero-x-actions@v1.0.2` or `@v1` |
 
 Consumers do **not** run `npm install` on this repo. The committed `dist/index.js` must include dependencies (built with `@vercel/ncc`). Shipping plain `tsc` output without `node_modules` causes `Cannot find module '@actions/core'`.
+
+From **v1.0.2**, the action also exports Zero-X findings as SARIF and uploads them to **GitHub Code Scanning** (Security tab). Consumer workflows need `permissions.security-events: write` and Code scanning enabled.
 
 ---
 
@@ -64,12 +66,14 @@ Use [semantic versioning](https://semver.org/):
 
 | Tag | Meaning |
 |-----|---------|
-| `v1.0.0` | Exact release |
+| `v1.0.2` | Current exact release (SARIF → GitHub Code Scanning) |
+| `v1.0.1` | ncc-bundled runtime fix |
+| `v1.0.0` | Initial Marketplace release |
 | `v1` | Moving major tag (optional; point to latest `v1.x.x`) |
 
-Recommended first release: `v1.0.0`, then also maintain major tag `v1`.
+Recommended: publish **`v1.0.2`**, then also maintain major tag `v1`.
 
-Bump `version` in [`package.json`](../package.json) to match (e.g. `1.0.0`) if you track it there.
+Bump `version` in [`package.json`](../package.json) to match (e.g. `1.0.2`) if you track it there.
 
 ---
 
@@ -82,12 +86,12 @@ git checkout main
 git pull origin main
 
 # Annotated tag for the exact version
-git tag -a v1.0.0 -m "Release v1.0.0"
+git tag -a v1.0.2 -m "Release v1.0.2"
 
 # Optional: major version tag for consumers using @v1
 git tag -fa v1 -m "Release v1"
 
-git push origin v1.0.0
+git push origin v1.0.2
 git push origin v1 --force   # only for moving major tag v1
 ```
 
@@ -99,9 +103,9 @@ git push origin v1 --force   # only for moving major tag v1
 
 1. Open the repository on GitHub.
 2. Go to **Releases** → **Draft a new release**.
-3. **Choose a tag**: create or select `v1.0.0` (target: `main`).
-4. **Release title**: e.g. `v1.0.0`.
-5. **Description**: summarize changes (inputs, pre-check, API alignment, etc.).
+3. **Choose a tag**: create or select `v1.0.2` (target: `main` or your release branch).
+4. **Release title**: e.g. `v1.0.2`.
+5. **Description**: summarize changes (SARIF export, Code Scanning upload, inputs, etc.).
 6. (Optional Marketplace) Check **Publish this Action to the GitHub Marketplace**:
    - Accept the Marketplace agreement if prompted.
    - Pick a **primary category** (e.g. *Security* or *Continuous integration*).
@@ -116,8 +120,8 @@ Publishing the release triggers the **Publish** workflow (`on: release: types: [
 
 ### 6.1 Check the release
 
-- Tag `v1.0.0` appears under **Releases**.
-- Release assets / commit include `action.yml` and `dist/`.
+- Tag `v1.0.2` appears under **Releases**.
+- Release assets / commit include `action.yml` and bundled `dist/index.js`.
 
 ### 6.2 Test in another repository (or this one)
 
@@ -125,21 +129,29 @@ Publishing the release triggers the **Publish** workflow (`on: release: types: [
 jobs:
   zerox-scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Zero-X Security Scan
         id: zerox
-        uses: YOUR_ORG/zero-x-actions@v1.0.0
+        uses: YOUR_ORG/zero-x-actions@v1.0.2
         # or: uses: YOUR_ORG/zero-x-actions@v1
         with:
           zerox-api-key: ${{ secrets.ZEROX_API_KEY }}
           zerox-url: ${{ secrets.ZEROX_URL }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - run: echo "Results: ${{ steps.zerox.outputs.scanResultUrl }}"
+      - run: |
+          echo "Results: ${{ steps.zerox.outputs.scanResultUrl }}"
+          echo "SARIF: ${{ steps.zerox.outputs.sarifPath }}"
 ```
 
 Replace `YOUR_ORG` with your GitHub user or organization (e.g. `zero-x-security`).
+
+Confirm alerts under **Security → Code scanning**.
 
 ### 6.3 Marketplace listing (if enabled)
 
@@ -157,12 +169,12 @@ For each new release:
 
 1. Merge changes to `main`.
 2. Run `npm run build` and commit updated `dist/` if needed.
-3. Tag `v1.0.1` (or `v1.1.0` / `v2.0.0` as appropriate).
+3. Tag `v1.0.2` (or next patch/minor as appropriate).
 4. Create a new GitHub Release for that tag.
 5. Update the major tag if you use it:
 
    ```bash
-   git tag -fa v1 -m "Update v1 to v1.0.1"
+   git tag -fa v1 -m "Update v1 to v1.0.2"
    git push origin v1 --force
    ```
 
@@ -177,10 +189,11 @@ Consumers on `@v1` pick up the latest `v1.x.x` only after you move the `v1` tag.
 - [ ] `action.yml` at repo root with `name`, `description`, `runs`
 - [ ] `dist/` committed and matches `npm run build`
 - [ ] CI green on `main`
-- [ ] Tag created (`vX.Y.Z`)
+- [ ] Tag created (`v1.0.2`)
 - [ ] GitHub Release published
 - [ ] (Optional) Marketplace checkbox + category set
-- [ ] Smoke-tested `uses: OWNER/zero-x-actions@vX.Y.Z` in a workflow
+- [ ] Smoke-tested `uses: OWNER/zero-x-actions@v1.0.2` with `security-events: write`
+- [ ] Confirmed findings under Security → Code scanning
 
 ---
 
@@ -192,8 +205,9 @@ Consumers on `@v1` pick up the latest `v1.x.x` only after you move the `v1` tag.
 | Action fails with missing module / old code | Rebuild with `npm run build` (ncc bundle), **commit** `dist/`, then retag / release. |
 | `Cannot find module '@actions/core'` | Dist was compiled with `tsc` only. Bundle with ncc so deps are inlined, commit `dist/index.js`, publish a new tag. |
 | CI “dist is out of date” | Run `npm run build`, commit `dist/`, push again. |
-| Consumer cannot find `@v1` | Create/push major tag `v1`, or tell them to use `@v1.0.0`. |
+| Consumer cannot find `@v1` | Create/push major tag `v1`, or tell them to use `@v1.0.2`. |
 | Scan fails “repo not available” | Add the consumer repo in Zero-X (**Datasources → GitHub**) before running the action. |
+| SARIF upload 403/404 | Add `permissions.security-events: write`, pass `github-token`, and enable Code scanning (GHAS for private repos). |
 
 ---
 
