@@ -10,7 +10,7 @@ Step-by-step guide to publish **zero-x-actions** as a reusable GitHub Action (an
 |------|--------------------|
 | Action metadata | Root [`action.yml`](../action.yml) |
 | Runtime entry | `dist/index.js` (Node 20, **ncc-bundled** with deps) |
-| Typical consumer ref | `OWNER/zero-x-actions@v1.0.4` or `@v1` |
+| Typical consumer ref | `OWNER/zero-x-actions@v1.0.5` or `@v1` |
 
 Consumers do **not** run `npm install` on this repo. The committed `dist/index.js` must include dependencies (built with `@vercel/ncc`). Shipping plain `tsc` output without `node_modules` causes `Cannot find module '@actions/core'`.
 
@@ -66,16 +66,17 @@ Use [semantic versioning](https://semver.org/):
 
 | Tag | Meaning |
 |-----|---------|
-| `v1.0.4` | Current exact release (default URL fix, clearer auth errors) |
+| `v1.0.5` | Current exact release (scan report + history in the job log) |
+| `v1.0.4` | Default URL fix, clearer auth errors, integration-list lookup |
 | `v1.0.3` | Job-based scan polling for the new backend |
 | `v1.0.2` | SARIF → GitHub Code Scanning |
 | `v1.0.1` | ncc-bundled runtime fix |
 | `v1.0.0` | Initial Marketplace release |
 | `v1` | Moving major tag (optional; point to latest `v1.x.x`) |
 
-Recommended: publish **`v1.0.4`**, then also maintain major tag `v1`.
+Recommended: publish **`v1.0.5`**, then also maintain major tag `v1`.
 
-Bump `version` in [`package.json`](../package.json) to match (e.g. `1.0.4`) if you track it there.
+Bump `version` in [`package.json`](../package.json) to match (e.g. `1.0.5`) if you track it there.
 
 ---
 
@@ -88,12 +89,12 @@ git checkout main
 git pull origin main
 
 # Annotated tag for the exact version
-git tag -a v1.0.4 -m "Release v1.0.4"
+git tag -a v1.0.5 -m "Release v1.0.5"
 
 # Optional: major version tag for consumers using @v1
 git tag -fa v1 -m "Release v1"
 
-git push origin v1.0.4
+git push origin v1.0.5
 git push origin v1 --force   # only for moving major tag v1
 ```
 
@@ -105,8 +106,8 @@ git push origin v1 --force   # only for moving major tag v1
 
 1. Open the repository on GitHub.
 2. Go to **Releases** → **Draft a new release**.
-3. **Choose a tag**: create or select `v1.0.4` (target: `main` or your release branch).
-4. **Release title**: e.g. `v1.0.4`.
+3. **Choose a tag**: create or select `v1.0.5` (target: `main` or your release branch).
+4. **Release title**: e.g. `v1.0.5`.
 5. **Description**: summarize changes (SARIF export, Code Scanning upload, inputs, etc.).
 6. (Optional Marketplace) Check **Publish this Action to the GitHub Marketplace**:
    - Accept the Marketplace agreement if prompted.
@@ -122,7 +123,7 @@ Publishing the release triggers the **Publish** workflow (`on: release: types: [
 
 ### 6.1 Check the release
 
-- Tag `v1.0.4` appears under **Releases**.
+- Tag `v1.0.5` appears under **Releases**.
 - Release assets / commit include `action.yml` and bundled `dist/index.js`.
 
 ### 6.2 Test in another repository (or this one)
@@ -139,7 +140,7 @@ jobs:
 
       - name: Zero-X Security Scan
         id: zerox
-        uses: YOUR_ORG/zero-x-actions@v1.0.4
+        uses: YOUR_ORG/zero-x-actions@v1.0.5
         # or: uses: YOUR_ORG/zero-x-actions@v1
         with:
           zerox-api-key: ${{ secrets.ZEROX_API_KEY }}
@@ -171,12 +172,12 @@ For each new release:
 
 1. Merge changes to `main`.
 2. Run `npm run build` and commit updated `dist/` if needed.
-3. Tag `v1.0.4` (or next patch/minor as appropriate).
+3. Tag `v1.0.5` (or next patch/minor as appropriate).
 4. Create a new GitHub Release for that tag.
 5. Update the major tag if you use it:
 
    ```bash
-   git tag -fa v1 -m "Update v1 to v1.0.4"
+   git tag -fa v1 -m "Update v1 to v1.0.5"
    git push origin v1 --force
    ```
 
@@ -191,10 +192,10 @@ Consumers on `@v1` pick up the latest `v1.x.x` only after you move the `v1` tag.
 - [ ] `action.yml` at repo root with `name`, `description`, `runs`
 - [ ] `dist/` committed and matches `npm run build`
 - [ ] CI green on `main`
-- [ ] Tag created (`v1.0.4`)
+- [ ] Tag created (`v1.0.5`)
 - [ ] GitHub Release published
 - [ ] (Optional) Marketplace checkbox + category set
-- [ ] Smoke-tested `uses: OWNER/zero-x-actions@v1.0.4` with `security-events: write`
+- [ ] Smoke-tested `uses: OWNER/zero-x-actions@v1.0.5` with `security-events: write`
 - [ ] Confirmed findings under Security → Code scanning
 
 ---
@@ -207,7 +208,7 @@ Consumers on `@v1` pick up the latest `v1.x.x` only after you move the `v1` tag.
 | Action fails with missing module / old code | Rebuild with `npm run build` (ncc bundle), **commit** `dist/`, then retag / release. |
 | `Cannot find module '@actions/core'` | Dist was compiled with `tsc` only. Bundle with ncc so deps are inlined, commit `dist/index.js`, publish a new tag. |
 | CI “dist is out of date” | Run `npm run build`, commit `dist/`, push again. |
-| Consumer cannot find `@v1` | Create/push major tag `v1`, or tell them to use `@v1.0.4`. |
+| Consumer cannot find `@v1` | Create/push major tag `v1`, or tell them to use `@v1.0.5`. |
 | Scan fails “repo not available” | Add the consumer repo in Zero-X (**Datasources → GitHub**) before running the action. |
 | SARIF upload 403/404 | Add `permissions.security-events: write`, pass `github-token`, and enable Code scanning (GHAS for private repos). |
 

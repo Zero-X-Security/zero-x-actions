@@ -61,6 +61,6 @@ When the action runs in a workflow:
 
 Findings appear under the consumer repo **Security → Code scanning** (Security and quality). They do **not** appear under Dependabot vulnerability alerts.
 
-Current published version for consumers: **`v1.0.4`**.
+Current published version for consumers: **`v1.0.5`**.
 
 This design keeps the business logic isolated in `main.ts`, `api.ts`, `sarif.ts`, and `github.ts` while CI workflows handle distribution and validation.
