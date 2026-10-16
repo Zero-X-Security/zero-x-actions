@@ -45,6 +45,18 @@ function repoUnavailableMessage(repoName: string, baseUrl: string): string {
   ].join('\n');
 }
 
+/** Show the kind of scan (IaC, SAST, ...) rather than the underlying engine. */
+function scanTypeLabel(raw?: string): string {
+  const value = (raw ?? '').toLowerCase();
+  if (value.includes('iac')) return 'IaC';
+  if (value.includes('sbom')) return 'SBOM';
+  if (value.includes('secret')) return 'Secrets';
+  if (value.includes('malware')) return 'Malware';
+  if (value.includes('vuln')) return 'Vulnerabilities';
+  if (value.includes('semgrep') || value.includes('sast')) return 'SAST';
+  return raw || 'Scan';
+}
+
 function describeCount(n?: number): string {
   return `${n ?? 0} finding${n === 1 ? '' : 's'}`;
 }
@@ -70,7 +82,7 @@ async function logScanHistory(
         ? ` (new: ${(summary.newVulnerabilities ?? 0) + (summary.newCspmFindings ?? 0)}, resolved: ${(summary.resolvedVulnerabilities ?? 0) + (summary.resolvedCspmFindings ?? 0)})`
         : '';
       core.info(
-        `  ${report.type ?? 'scan'} | ${report.status ?? 'unknown'} | ${describeCount(report.totalFindings)}${delta} | ${report.duration ?? '-'} | ${id}`,
+        `  ${scanTypeLabel(report.type)} | ${report.status ?? 'unknown'} | ${describeCount(report.totalFindings)}${delta} | ${report.duration ?? '-'} | ${id}`,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -91,7 +103,7 @@ async function logScanHistory(
     for (const item of history) {
       const current = item.id && scanResultIds.includes(item.id) ? '  <- this run' : '';
       core.info(
-        `  ${item.date ?? '-'} | ${item.type ?? item.name ?? 'scan'} | ${item.status ?? 'unknown'} | ${describeCount(item.findings)} | ${item.duration ?? '-'}${current}`,
+        `  ${item.date ?? '-'} | ${scanTypeLabel(item.type ?? item.name)} | ${item.status ?? 'unknown'} | ${describeCount(item.findings)} | ${item.duration ?? '-'}${current}`,
       );
     }
   } catch (err) {
