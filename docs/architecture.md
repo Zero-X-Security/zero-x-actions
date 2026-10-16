@@ -31,7 +31,7 @@ At a high level:
 - `src/api.ts`  
   Zero-X tenant API client (public OpenAPI):
   - Auth via `api-key` header.
-  - `findRepoDatasource(...)` – datasource list + details.
+  - `findRepoDatasource(...)` – looks up the repository via `GET /tenant/datasource/integration-list` (`keyword`, `providerType`).
   - `startScan(...)` – `POST /scan/execution`; returns one `jobId` per scanner (`scanId` is null while queued).
   - `getScanStatus(jobId)` – `GET /scan-jobs/{jobId}`; returns `status` (`QUEUED` → `DISPATCHED` → `RUNNING` → `COMPLETED` / `FAILED` / `RETRY`), `scanResultId`, `reportReady`, `errorCode`.
   - `listSecurityFindings(...)` / `getSecurityFindingDetails(findingId)`.
