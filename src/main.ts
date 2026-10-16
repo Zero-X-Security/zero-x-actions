@@ -256,7 +256,7 @@ export async function run(): Promise<void> {
     `Repository found in Zero-X: ${matched.name} (${matched.datasourceId})`,
   );
 
-  let scanIds: string[];
+  let jobIds: string[];
   try {
     const startRes = await client.startScan({
       providerType: matched.providerType || providerType,
@@ -264,8 +264,8 @@ export async function run(): Promise<void> {
       scanners,
       branchName,
     });
-    scanIds = startRes.scanIds;
-    core.info(`Scan started: ${scanIds.join(', ')}`);
+    jobIds = startRes.jobIds;
+    core.info(`Scan queued (job ids): ${jobIds.join(', ')}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     core.setOutput('outcome', 'failure');
@@ -274,15 +274,15 @@ export async function run(): Promise<void> {
   }
 
   const startedAt = Date.now();
-  const pending = new Set(scanIds);
+  const pending = new Set(jobIds);
   const failedIds: string[] = [];
-  let primaryScanId = scanIds[0];
+  let primaryScanId = jobIds[0];
 
   while (Date.now() - startedAt < MAX_WAIT_MS && pending.size > 0) {
-    for (const scanId of [...pending]) {
+    for (const jobId of [...pending]) {
       let statusRes;
       try {
-        statusRes = await client.getScanStatus(scanId);
+        statusRes = await client.getScanStatus(jobId);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         core.setOutput('outcome', 'failure');
@@ -291,22 +291,25 @@ export async function run(): Promise<void> {
       }
 
       if (statusRes.status === 'completed') {
-        pending.delete(scanId);
-        primaryScanId = scanId;
-        core.info(`Scan ${scanId} completed`);
+        pending.delete(jobId);
+        // Report/results links use scan_results.id, not the job id.
+        primaryScanId = statusRes.scanResultId || jobId;
+        core.info(`Scan job ${jobId} completed`);
         continue;
       }
 
       if (statusRes.status === 'failed') {
-        pending.delete(scanId);
-        failedIds.push(scanId);
-        primaryScanId = scanId;
-        core.warning(`Scan ${scanId} failed`);
+        pending.delete(jobId);
+        failedIds.push(jobId);
+        primaryScanId = statusRes.scanResultId || jobId;
+        core.warning(
+          `Scan job ${jobId} failed${statusRes.errorCode ? ` (${statusRes.errorCode})` : ''}`,
+        );
         continue;
       }
 
       core.info(
-        `Scan ${scanId} status: ${statusRes.status}. Waiting ${POLL_INTERVAL_MS / 1000}s...`,
+        `Scan job ${jobId} status: ${statusRes.status}. Waiting ${POLL_INTERVAL_MS / 1000}s...`,
       );
     }
 
@@ -328,7 +331,7 @@ export async function run(): Promise<void> {
     core.setOutput('scanResultUrl', resultUrl);
     core.setOutput('outcome', 'failure');
     core.setFailed(
-      `Scan failed (${failedIds.length}/${scanIds.length} scanner(s)): ${failedIds.join(', ')}`,
+      `Scan failed (${failedIds.length}/${jobIds.length} scanner(s)): ${failedIds.join(', ')}`,
     );
     return;
   }

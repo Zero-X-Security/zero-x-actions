@@ -19,6 +19,7 @@ export interface StartScanParams {
 export interface ScanExecutionResult {
   scanner?: string;
   resolvedScanner?: string;
+  jobId?: string;
   scanId?: string;
   success: boolean;
   message?: string;
@@ -29,15 +30,19 @@ export interface StartScanResponse {
   datasourceName?: string;
   providerType?: string;
   results: ScanExecutionResult[];
-  scanIds: string[];
+  /** scan_jobs ids to poll via GET /scan-jobs/{jobId} */
+  jobIds: string[];
 }
 
 export type ScanStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 export interface ScanStatusResponse {
   status: ScanStatus;
-  resultUrl?: string;
-  scanId?: string;
+  jobId?: string;
+  /** scan_results id; use for /scan/{id}/report once set */
+  scanResultId?: string;
+  reportReady?: boolean;
+  errorCode?: string;
 }
 
 interface ResponseEnvelope<T> {
@@ -76,10 +81,14 @@ interface MultiScanExecutionResponse {
   results?: ScanExecutionResult[];
 }
 
-interface ScanReport {
-  scanId?: string;
+interface ScanJob {
+  jobId?: string;
   status?: string;
-  target?: string;
+  scanner?: string;
+  datasourceId?: string;
+  errorCode?: string;
+  scanResultId?: string | null;
+  reportReady?: boolean;
 }
 
 export interface SecurityFindingListItem {
@@ -222,7 +231,7 @@ async function request<T>(
   if (!res.ok) {
     const body = await res.text();
     throw new Error(
-      `Zero-X API error ${res.status}: ${body || res.statusText}`,
+      `Zero-X API error ${res.status} on ${options.method ?? 'GET'} ${path.split('?')[0]}: ${body || res.statusText}`,
     );
   }
   if (res.status === 204 || res.headers.get('content-length') === '0') {
@@ -265,18 +274,37 @@ export function createZeroXClient(baseUrl: string, apiKey: string) {
         return null;
       }
 
-      const query = new URLSearchParams();
-      query.set('keyword', shortName || fullName);
-      if (providerType) {
-        query.set('provideType', providerType);
-      }
+      const keyword = shortName || fullName;
+      // The backend has historically spelled the provider filter 'provideType';
+      // try that, then 'providerType', then no filter, so a rename can't break us.
+      const variants: Array<Record<string, string>> = providerType
+        ? [
+            { keyword, provideType: providerType },
+            { keyword, providerType },
+            { keyword },
+          ]
+        : [{ keyword }];
 
-      const list = await requestData<DatasourceListItem[]>(
-        baseUrl,
-        apiKey,
-        `/tenant/datasource/datasource-list?${query.toString()}`,
-        { method: 'GET' },
-      );
+      let list: DatasourceListItem[] | undefined;
+      let lastError: unknown;
+      for (const params of variants) {
+        try {
+          list = await requestData<DatasourceListItem[]>(
+            baseUrl,
+            apiKey,
+            `/tenant/datasource/datasource-list?${new URLSearchParams(params).toString()}`,
+            { method: 'GET' },
+          );
+          break;
+        } catch (err) {
+          lastError = err;
+          const message = err instanceof Error ? err.message : String(err);
+          if (!message.includes('API error 400')) throw err;
+        }
+      }
+      if (list === undefined) {
+        throw lastError;
+      }
 
       const candidates = (Array.isArray(list) ? list : []).filter((ds) =>
         matchesRepoIdentity(ds.name, fullName, shortName),
@@ -357,11 +385,13 @@ export function createZeroXClient(baseUrl: string, apiKey: string) {
       );
 
       const results = Array.isArray(data?.results) ? data.results : [];
-      const scanIds = results
-        .filter((r) => r.success && r.scanId)
-        .map((r) => String(r.scanId));
+      // New flow: queue returns jobId (scanId is null until the scanner starts).
+      // Fall back to scanId for backends that still return it only.
+      const jobIds = results
+        .filter((r) => r.success && (r.jobId || r.scanId))
+        .map((r) => String(r.jobId || r.scanId));
 
-      if (scanIds.length === 0) {
+      if (jobIds.length === 0) {
         const failed = results
           .filter((r) => !r.success)
           .map((r) => r.message || r.scanner || 'unknown')
@@ -369,7 +399,7 @@ export function createZeroXClient(baseUrl: string, apiKey: string) {
         throw new Error(
           failed
             ? `Start scan failed: ${failed}`
-            : 'Start scan response missing scanId',
+            : 'Start scan response missing jobId',
         );
       }
 
@@ -378,21 +408,24 @@ export function createZeroXClient(baseUrl: string, apiKey: string) {
         datasourceName: data?.datasourceName,
         providerType: data?.providerType,
         results,
-        scanIds,
+        jobIds,
       };
     },
 
-    async getScanStatus(scanId: string): Promise<ScanStatusResponse> {
-      const report = await requestData<ScanReport>(
+    async getScanStatus(jobId: string): Promise<ScanStatusResponse> {
+      const job = await requestData<ScanJob>(
         baseUrl,
         apiKey,
-        `/tenant/scan/${encodeURIComponent(scanId)}/report`,
+        `/tenant/scan-jobs/${encodeURIComponent(jobId)}`,
         { method: 'GET' },
       );
 
       return {
-        status: normalizeScanStatus(report?.status),
-        scanId: report?.scanId ?? scanId,
+        status: normalizeScanStatus(job?.status),
+        jobId: job?.jobId ?? jobId,
+        scanResultId: job?.scanResultId ? String(job.scanResultId) : undefined,
+        reportReady: job?.reportReady,
+        errorCode: job?.errorCode,
       };
     },
 
