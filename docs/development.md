@@ -81,7 +81,7 @@ Also create a GitHub Environment named `zerox-ci` (**Settings → Environments**
 
 To exercise the action in a real pipeline, in another repository:
 
-1. Publish a version of this action (see [`docs/publishing.md`](publishing.md)), currently **`v1.0.2`**.
+1. Publish a version of this action (see [`docs/publishing.md`](publishing.md)), currently **`v1.0.3`**.
 2. Reference it from a workflow:
 
    ```yaml
@@ -96,7 +96,7 @@ To exercise the action in a real pipeline, in another repository:
 
          - name: Zero-X Security Scan
            id: zerox
-           uses: zero-x-security/zero-x-actions@v1.0.2
+           uses: zero-x-security/zero-x-actions@v1.0.3
            with:
              zerox-api-key: ${{ secrets.ZEROX_API_KEY }}
              zerox-url: ${{ secrets.ZEROX_URL }}

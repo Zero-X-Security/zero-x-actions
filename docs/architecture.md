@@ -8,7 +8,7 @@ At a high level:
 
 - A workflow in a consumer repository uses `zero-x-security/zero-x-actions`.
 - The action reads configuration (Zero-X URL, API key, scanners, repository metadata).
-- It **pre-checks** that the repository exists in Zero-X (Datasources), then starts a scan and polls until completion.
+- It **pre-checks** that the repository exists in Zero-X (Datasources), then queues scans and polls the scan jobs until they finish.
 - After success, it fetches findings, converts them to **SARIF 2.1.0**, and uploads to **GitHub Code Scanning** (Security tab).
 - It exposes the scan result URL, outcome, and SARIF path as action outputs.
 
@@ -25,14 +25,15 @@ At a high level:
   - Reads inputs via `@actions/core`.
   - Builds a client using `createZeroXClient` from `api.ts`.
   - Pre-checks repo availability; fails early with a setup note if missing.
-  - Starts a scan and periodically polls each scan report.
+  - Queues a scan per scanner and periodically polls each scan job (`jobId`).
   - On success: fetches findings, writes `zerox-results.sarif`, uploads to Code Scanning when enabled.
 
 - `src/api.ts`  
   Zero-X tenant API client (public OpenAPI):
   - Auth via `api-key` header.
   - `findRepoDatasource(...)` – datasource list + details.
-  - `startScan(...)` / `getScanStatus(scanId)`.
+  - `startScan(...)` – `POST /scan/execution`; returns one `jobId` per scanner (`scanId` is null while queued).
+  - `getScanStatus(jobId)` – `GET /scan-jobs/{jobId}`; returns `status` (`QUEUED` → `DISPATCHED` → `RUNNING` → `COMPLETED` / `FAILED` / `RETRY`), `scanResultId`, `reportReady`, `errorCode`.
   - `listSecurityFindings(...)` / `getSecurityFindingDetails(findingId)`.
 
 - `src/sarif.ts`  
@@ -51,7 +52,7 @@ When the action runs in a workflow:
 1. GitHub Actions runner executes `node dist/index.js`.
 2. The code reads required inputs (`zerox-api-key`, `zerox-url`) and optional metadata.
 3. **Pre-check:** looks up the repository in Zero-X datasources. If not found, fails with a setup note.
-4. A scan is started and polled until completion, failure, or timeout.
+4. Scans are queued (`POST /scan/execution` → `jobId` per scanner) and each job is polled (`GET /scan-jobs/{jobId}`) until it is `COMPLETED` or `FAILED` (`RETRY` keeps polling), or the 30-minute timeout is hit. On completion the job's `scanResultId` (`scan_results.id`) is used for the result link; job IDs must not be passed to `/scan/{id}/report`.
 5. On success:
    - Findings are loaded from `/tenant/security-findings/...`.
    - SARIF is written to the workspace (`zerox-results.sarif`).
@@ -60,6 +61,6 @@ When the action runs in a workflow:
 
 Findings appear under the consumer repo **Security → Code scanning** (Security and quality). They do **not** appear under Dependabot vulnerability alerts.
 
-Current published version for consumers: **`v1.0.2`**.
+Current published version for consumers: **`v1.0.3`**.
 
 This design keeps the business logic isolated in `main.ts`, `api.ts`, `sarif.ts`, and `github.ts` while CI workflows handle distribution and validation.
