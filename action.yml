@@ -13,7 +13,7 @@ inputs:
     required: true
   zerox-url:
     description: 'Zero-X platform base URL'
-    default: 'https://in.infimatrix.com'
+    default: 'https://in.zero-x.cloud'
     required: true
   scanners:
     description: 'Comma-separated list: vulns, iac, sast, malware, sbom (default all)'

@@ -230,8 +230,18 @@ async function request<T>(
   });
   if (!res.ok) {
     const body = await res.text();
+    // The platform answers a missing/invalid/expired api-key with 401, or with
+    // this generic 400 body, so point users at the credentials.
+    const authRejected =
+      res.status === 401 ||
+      res.status === 403 ||
+      (res.status === 400 &&
+        body.includes('An error occurred while processing your request'));
+    const hint = authRejected
+      ? ` Zero-X may have rejected the credentials: check that zerox-api-key is a valid, unexpired API key and that zerox-url (${normalizeBaseUrl(baseUrl)}) is the host that issued it.`
+      : '';
     throw new Error(
-      `Zero-X API error ${res.status} on ${options.method ?? 'GET'} ${path.split('?')[0]}: ${body || res.statusText}`,
+      `Zero-X API error ${res.status} on ${options.method ?? 'GET'} ${path.split('?')[0]}: ${body || res.statusText}.${hint}`,
     );
   }
   if (res.status === 204 || res.headers.get('content-length') === '0') {
@@ -274,37 +284,18 @@ export function createZeroXClient(baseUrl: string, apiKey: string) {
         return null;
       }
 
-      const keyword = shortName || fullName;
-      // The backend has historically spelled the provider filter 'provideType';
-      // try that, then 'providerType', then no filter, so a rename can't break us.
-      const variants: Array<Record<string, string>> = providerType
-        ? [
-            { keyword, provideType: providerType },
-            { keyword, providerType },
-            { keyword },
-          ]
-        : [{ keyword }];
+      const query = new URLSearchParams();
+      query.set('keyword', shortName || fullName);
+      if (providerType) {
+        query.set('provideType', providerType);
+      }
 
-      let list: DatasourceListItem[] | undefined;
-      let lastError: unknown;
-      for (const params of variants) {
-        try {
-          list = await requestData<DatasourceListItem[]>(
-            baseUrl,
-            apiKey,
-            `/tenant/datasource/datasource-list?${new URLSearchParams(params).toString()}`,
-            { method: 'GET' },
-          );
-          break;
-        } catch (err) {
-          lastError = err;
-          const message = err instanceof Error ? err.message : String(err);
-          if (!message.includes('API error 400')) throw err;
-        }
-      }
-      if (list === undefined) {
-        throw lastError;
-      }
+      const list = await requestData<DatasourceListItem[]>(
+        baseUrl,
+        apiKey,
+        `/tenant/datasource/datasource-list?${query.toString()}`,
+        { method: 'GET' },
+      );
 
       const candidates = (Array.isArray(list) ? list : []).filter((ds) =>
         matchesRepoIdentity(ds.name, fullName, shortName),
