@@ -51,27 +51,18 @@ interface ResponseEnvelope<T> {
   status?: number;
 }
 
-interface DatasourceListItem {
-  datasourceId?: string;
-  type?: string;
+/** Item of GET /tenant/datasource/integration-list (repositories and other resources). */
+interface IntegrationListItem {
+  resourceId?: string;
+  /** Repository / resource name */
   name?: string;
+  datasourceId?: string;
+  datasourceName?: string;
+  providerType?: string;
+  resourceType?: string;
+  type?: string;
   isActive?: boolean;
   status?: string;
-}
-
-interface GitHubRepositoryInfo {
-  id?: string;
-  name?: string;
-  fullName?: string;
-  htmlUrl?: string;
-  added?: boolean;
-}
-
-interface DatasourceDetails {
-  dataSourceId?: string;
-  name?: string;
-  provider?: string;
-  githubRepositories?: GitHubRepositoryInfo[];
 }
 
 interface MultiScanExecutionResponse {
@@ -197,22 +188,6 @@ function matchesRepoIdentity(
   );
 }
 
-function githubRepoMatches(
-  repos: GitHubRepositoryInfo[] | undefined,
-  fullName: string,
-  shortName: string,
-): boolean {
-  if (!repos || repos.length === 0) {
-    return false;
-  }
-  return repos.some(
-    (repo) =>
-      repo.added === true &&
-      (matchesRepoIdentity(repo.fullName, fullName, shortName) ||
-        matchesRepoIdentity(repo.name, fullName, shortName)),
-  );
-}
-
 async function request<T>(
   baseUrl: string,
   apiKey: string,
@@ -287,74 +262,36 @@ export function createZeroXClient(baseUrl: string, apiKey: string) {
       const query = new URLSearchParams();
       query.set('keyword', shortName || fullName);
       if (providerType) {
-        query.set('provideType', providerType);
+        query.set('providerType', providerType);
       }
+      query.set('pageNumber', '1');
+      query.set('pageSize', '100');
 
-      const list = await requestData<DatasourceListItem[]>(
+      const list = await requestData<IntegrationListItem[]>(
         baseUrl,
         apiKey,
-        `/tenant/datasource/datasource-list?${query.toString()}`,
+        `/tenant/datasource/integration-list?${query.toString()}`,
         { method: 'GET' },
       );
+      const items = Array.isArray(list) ? list : [];
 
-      const candidates = (Array.isArray(list) ? list : []).filter((ds) =>
-        matchesRepoIdentity(ds.name, fullName, shortName),
-      );
+      // Prefer an exact owner/repo match, then a short repo-name match.
+      const match =
+        items.find((i) => equalsIgnoreCase(i.name, fullName)) ??
+        items.find((i) => matchesRepoIdentity(i.name, fullName, shortName)) ??
+        items.find((i) =>
+          matchesRepoIdentity(i.datasourceName, fullName, shortName),
+        );
 
-      // Fall back to all returned items when keyword search is loose / name layout differs
-      const toInspect =
-        candidates.length > 0 ? candidates : Array.isArray(list) ? list : [];
-
-      for (const ds of toInspect) {
-        const datasourceId = ds.datasourceId;
-        if (!datasourceId) continue;
-
-        let details: DatasourceDetails | undefined;
-        try {
-          details = await requestData<DatasourceDetails>(
-            baseUrl,
-            apiKey,
-            `/tenant/datasource/datasource-details/${encodeURIComponent(datasourceId)}`,
-            { method: 'GET' },
-          );
-        } catch {
-          // If details fail but name already matched, accept datasource-name match.
-          if (matchesRepoIdentity(ds.name, fullName, shortName)) {
-            return {
-              datasourceId,
-              name: ds.name ?? fullName,
-              providerType: ds.type ?? providerType,
-            };
-          }
-          continue;
-        }
-
-        const githubRepos = details?.githubRepositories;
-        if (githubRepos && githubRepos.length > 0) {
-          if (githubRepoMatches(githubRepos, fullName, shortName)) {
-            return {
-              datasourceId,
-              name: details?.name ?? ds.name ?? fullName,
-              providerType: details?.provider ?? ds.type ?? providerType,
-            };
-          }
-          continue;
-        }
-
-        // No githubRepositories list: accept datasource-name match alone
-        if (
-          matchesRepoIdentity(ds.name, fullName, shortName) ||
-          matchesRepoIdentity(details?.name, fullName, shortName)
-        ) {
-          return {
-            datasourceId,
-            name: details?.name ?? ds.name ?? fullName,
-            providerType: details?.provider ?? ds.type ?? providerType,
-          };
-        }
+      if (!match || !match.datasourceId) {
+        return null;
       }
 
-      return null;
+      return {
+        datasourceId: match.datasourceId,
+        name: match.datasourceName ?? match.name ?? fullName,
+        providerType: match.providerType ?? match.type ?? providerType,
+      };
     },
 
     async startScan(params: StartScanParams): Promise<StartScanResponse> {
