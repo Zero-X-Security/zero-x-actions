@@ -53,7 +53,7 @@ When the action runs in a workflow:
 2. The code reads required inputs (`zerox-api-key`, `zerox-url`) and optional metadata.
 3. **Pre-check:** looks up the repository in Zero-X datasources. If not found, fails with a setup note.
 4. Scans are queued (`POST /scan/execution` → `jobId` per scanner) and each job is polled (`GET /scan-jobs/{jobId}`) until it is `COMPLETED` or `FAILED` (`RETRY` keeps polling), or the 30-minute timeout is hit. On completion the job's `scanResultId` (`scan_results.id`) is used for the result link; job IDs must not be passed to `/scan/{id}/report`.
-5. On success:
+5. On success, the log shows this run's per-scanner report and the datasource's recent scan history (`/scan/{scanResultId}/report`, `/scan/scan-history`). Then:
    - Findings are loaded from `/tenant/security-findings/...`.
    - SARIF is written to the workspace (`zerox-results.sarif`).
    - If `upload-to-github` is true, SARIF is uploaded to GitHub Code Scanning (requires `security-events: write`).

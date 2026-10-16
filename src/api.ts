@@ -72,6 +72,35 @@ interface MultiScanExecutionResponse {
   results?: ScanExecutionResult[];
 }
 
+export interface ScanReport {
+  scanId?: string;
+  type?: string;
+  target?: string;
+  totalFindings?: number;
+  status?: string;
+  started?: string;
+  finished?: string;
+  duration?: string;
+  detailedSummary?: {
+    newVulnerabilities?: number;
+    newCspmFindings?: number;
+    resolvedVulnerabilities?: number;
+    resolvedCspmFindings?: number;
+  };
+}
+
+export interface ScanHistoryItem {
+  /** scan_results.id */
+  id?: string;
+  name?: string;
+  type?: string;
+  date?: string;
+  status?: string;
+  findings?: number;
+  duration?: string;
+  targetType?: string;
+}
+
 interface ScanJob {
   jobId?: string;
   status?: string;
@@ -355,6 +384,32 @@ export function createZeroXClient(baseUrl: string, apiKey: string) {
         reportReady: job?.reportReady,
         errorCode: job?.errorCode,
       };
+    },
+
+    async getScanReport(scanResultId: string): Promise<ScanReport> {
+      return requestData<ScanReport>(
+        baseUrl,
+        apiKey,
+        `/tenant/scan/${encodeURIComponent(scanResultId)}/report`,
+        { method: 'GET' },
+      );
+    },
+
+    async listScanHistory(params: {
+      dataSourceId: string;
+      pageSize?: number;
+    }): Promise<ScanHistoryItem[]> {
+      const query = new URLSearchParams();
+      query.set('dataSourceId', params.dataSourceId);
+      query.set('pageNumber', '1');
+      query.set('pageSize', String(params.pageSize ?? 10));
+      const data = await requestData<ScanHistoryItem[]>(
+        baseUrl,
+        apiKey,
+        `/tenant/scan/scan-history?${query.toString()}`,
+        { method: 'GET' },
+      );
+      return Array.isArray(data) ? data : [];
     },
 
     async listSecurityFindings(
