@@ -177,5 +177,5 @@ Given this setup, you can validate the project in three layers:
    - `Publish` (build + dist verification).
    - `Test action` (runs the action with Zero-X secrets + SARIF upload permissions).
    - `Security (zizmor)` (checks workflow security).
-3. **Consumer workflow** – in a separate repository, use `zero-x-security/zero-x-actions@v1.0.4` with `security-events: write` and confirm alerts under Security → Code scanning.
+3. **Consumer workflow** – in a separate repository, use `zero-x-security/zero-x-actions@v1.0.5` with `security-events: write` and confirm alerts under Security → Code scanning.
 

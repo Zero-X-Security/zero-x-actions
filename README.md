@@ -32,7 +32,7 @@ jobs:
 
       - name: Zero-X Security Scan
         id: zerox
-        uses: zero-x-security/zero-x-actions@v1.0.4
+        uses: zero-x-security/zero-x-actions@v1.0.5
         with:
           zerox-api-key: ${{ secrets.ZEROX_API_KEY }}
           zerox-url: ${{ secrets.ZEROX_URL }}
@@ -122,7 +122,7 @@ There are two main ways to validate the project:
    - Create Environment **zerox-ci** under Settings → Environments (required by Test action).
 
 2. **In a consumer repository**  
-   Publish or reference a version of this action (e.g. `zero-x-security/zero-x-actions@v1.0.4`) and use it in a workflow as shown in the Usage section above.
+   Publish or reference a version of this action (e.g. `zero-x-security/zero-x-actions@v1.0.5`) and use it in a workflow as shown in the Usage section above.
 
 For more details on the CI workflows, see [docs/ci-workflows.md](docs/ci-workflows.md).
 
@@ -133,6 +133,6 @@ See **[`docs/publishing.md`](docs/publishing.md)** for the full step-by-step gui
 Short version:
 
 1. Build and commit `dist/` (`npm ci && npm run build`).
-2. Create a release tag (e.g. `v1.0.4`) and publish a **GitHub Release**.
+2. Create a release tag (e.g. `v1.0.5`) and publish a **GitHub Release**.
 3. Optionally check **Publish this Action to the GitHub Marketplace** (public repo + 2FA required).
-4. Consumers use `YOUR_ORG/zero-x-actions@v1.0.4` or `@v1`.
+4. Consumers use `YOUR_ORG/zero-x-actions@v1.0.5` or `@v1`.

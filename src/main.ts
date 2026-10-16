@@ -18,6 +18,7 @@ const MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes
 const FINDINGS_PAGE_SIZE = 100;
 const MAX_FINDING_DETAILS = 500;
 const SARIF_FILENAME = 'zerox-results.sarif';
+const HISTORY_PAGE_SIZE = 10;
 
 function parseScanners(raw: string): string[] {
   return raw
@@ -42,6 +43,75 @@ function repoUnavailableMessage(repoName: string, baseUrl: string): string {
     'Note: Add/connect this repository in Zero-X Cloud (Datasources → GitHub), then re-run the workflow.',
     `Platform: ${platform}`,
   ].join('\n');
+}
+
+/** Show the kind of scan (IaC, SAST, ...) rather than the underlying engine. */
+function scanTypeLabel(raw?: string): string {
+  const value = (raw ?? '').toLowerCase();
+  if (value.includes('iac')) return 'IaC';
+  if (value.includes('sbom')) return 'SBOM';
+  if (value.includes('secret')) return 'Secrets';
+  if (value.includes('malware')) return 'Malware';
+  if (value.includes('vuln')) return 'Vulnerabilities';
+  if (value.includes('semgrep') || value.includes('sast')) return 'SAST';
+  return raw || 'Scan';
+}
+
+function describeCount(n?: number): string {
+  return `${n ?? 0} finding${n === 1 ? '' : 's'}`;
+}
+
+/**
+ * Log this run's scan reports and the datasource's recent scan history.
+ * Best effort: failures only produce warnings.
+ */
+async function logScanHistory(
+  client: ReturnType<typeof createZeroXClient>,
+  matched: MatchedDatasource,
+  scanResultIds: string[],
+): Promise<number> {
+  let reportedFindings = 0;
+  core.info('');
+  core.info('Scan results for this run:');
+  for (const id of scanResultIds) {
+    try {
+      const report = await client.getScanReport(id);
+      reportedFindings += report.totalFindings ?? 0;
+      const summary = report.detailedSummary;
+      const delta = summary
+        ? ` (new: ${(summary.newVulnerabilities ?? 0) + (summary.newCspmFindings ?? 0)}, resolved: ${(summary.resolvedVulnerabilities ?? 0) + (summary.resolvedCspmFindings ?? 0)})`
+        : '';
+      core.info(
+        `  ${scanTypeLabel(report.type)} | ${report.status ?? 'unknown'} | ${describeCount(report.totalFindings)}${delta} | ${report.duration ?? '-'} | ${id}`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      core.warning(`Could not load report for scan ${id}: ${message}`);
+    }
+  }
+
+  try {
+    const history = await client.listScanHistory({
+      dataSourceId: matched.datasourceId,
+      pageSize: HISTORY_PAGE_SIZE,
+    });
+    core.info('');
+    core.info(`Scan history for ${matched.name} (latest ${history.length}):`);
+    if (history.length === 0) {
+      core.info('  (no previous scans)');
+    }
+    for (const item of history) {
+      const current = item.id && scanResultIds.includes(item.id) ? '  <- this run' : '';
+      core.info(
+        `  ${item.date ?? '-'} | ${scanTypeLabel(item.type ?? item.name)} | ${item.status ?? 'unknown'} | ${describeCount(item.findings)} | ${item.duration ?? '-'}${current}`,
+      );
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    core.warning(`Could not load scan history: ${message}`);
+  }
+  core.info('');
+  return reportedFindings;
 }
 
 async function collectFindings(
@@ -120,6 +190,7 @@ async function publishFindingsToGitHub(params: {
   uploadToGithub: boolean;
   githubToken?: string;
   branchName?: string;
+  reportedFindings: number;
 }): Promise<void> {
   let findings: FindingForSarif[] = [];
   try {
@@ -131,6 +202,16 @@ async function publishFindingsToGitHub(params: {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     core.warning(`Failed to fetch Zero-X findings for SARIF: ${message}`);
+    return;
+  }
+
+  if (findings.length === 0) {
+    // Nothing to export; the scan history above already shows the results.
+    if (params.reportedFindings > 0) {
+      core.warning(
+        `Scan reports show ${params.reportedFindings} finding(s) but the findings list returned none; nothing was exported to GitHub Code Scanning.`,
+      );
+    }
     return;
   }
 
@@ -149,13 +230,6 @@ async function publishFindingsToGitHub(params: {
 
   if (!params.uploadToGithub) {
     core.info('Skipping GitHub Code Scanning upload (upload-to-github=false)');
-    return;
-  }
-
-  if (findings.length === 0) {
-    core.info(
-      'No findings to upload; skipping GitHub Code Scanning upload.',
-    );
     return;
   }
 
@@ -276,6 +350,7 @@ export async function run(): Promise<void> {
   const startedAt = Date.now();
   const pending = new Set(jobIds);
   const failedIds: string[] = [];
+  const scanResultIds: string[] = [];
   let primaryScanId = jobIds[0];
 
   while (Date.now() - startedAt < MAX_WAIT_MS && pending.size > 0) {
@@ -294,6 +369,7 @@ export async function run(): Promise<void> {
         pending.delete(jobId);
         // Report/results links use scan_results.id, not the job id.
         primaryScanId = statusRes.scanResultId || jobId;
+        if (statusRes.scanResultId) scanResultIds.push(statusRes.scanResultId);
         core.info(`Scan job ${jobId} completed`);
         continue;
       }
@@ -340,6 +416,12 @@ export async function run(): Promise<void> {
   core.setOutput('outcome', 'success');
   core.info(`Scan completed. Results: ${resultUrl}`);
 
+  const reportedFindings = await logScanHistory(
+    client,
+    matched,
+    scanResultIds,
+  );
+
   await publishFindingsToGitHub({
     client,
     matched,
@@ -348,5 +430,6 @@ export async function run(): Promise<void> {
     uploadToGithub,
     githubToken,
     branchName,
+    reportedFindings,
   });
 }
