@@ -33,7 +33,7 @@ jobs:
 
       - name: Zero-X Security Scan
         id: zerox
-        uses: zero-x-security/zero-x-actions@v1.0.7
+        uses: zero-x-security/zero-x-actions@v1.0.8
         with:
           zerox-api-key: ${{ secrets.ZEROX_API_KEY }}
           zerox-url: ${{ secrets.ZEROX_URL }}
@@ -44,6 +44,12 @@ jobs:
           branch-name: ${{ github.head_ref || github.ref_name }}
           commit-sha: ${{ github.event.pull_request.head.sha || github.sha }}
           repo-name: ${{ github.repository }}
+          # Pull request details sent to Zero-X (id, title, url required; base branch optional).
+          # Detected automatically; set them only to override. Empty on non-PR events.
+          pr-id: ${{ github.event.pull_request.number }}
+          pr-base-branch: ${{ github.event.pull_request.base.ref }}
+          pr-title: ${{ github.event.pull_request.title }}
+          pr-url: ${{ github.event.pull_request.html_url }}
           # Optional overrides:
           # upload-to-github: 'true'
           # scanners: 'vulns,iac,sast,malware,sbom'
@@ -129,7 +135,7 @@ There are two main ways to validate the project:
    - Create Environment **zerox-ci** under Settings → Environments (required by Test action).
 
 2. **In a consumer repository**  
-   Publish or reference a version of this action (e.g. `zero-x-security/zero-x-actions@v1.0.7`) and use it in a workflow as shown in the Usage section above.
+   Publish or reference a version of this action (e.g. `zero-x-security/zero-x-actions@v1.0.8`) and use it in a workflow as shown in the Usage section above.
 
 For more details on the CI workflows, see [docs/ci-workflows.md](docs/ci-workflows.md).
 
@@ -140,6 +146,6 @@ See **[`docs/publishing.md`](docs/publishing.md)** for the full step-by-step gui
 Short version:
 
 1. Build and commit `dist/` (`npm ci && npm run build`).
-2. Create a release tag (e.g. `v1.0.7`) and publish a **GitHub Release**.
+2. Create a release tag (e.g. `v1.0.8`) and publish a **GitHub Release**.
 3. Optionally check **Publish this Action to the GitHub Marketplace** (public repo + 2FA required).
-4. Consumers use `YOUR_ORG/zero-x-actions@v1.0.7` or `@v1`.
+4. Consumers use `YOUR_ORG/zero-x-actions@v1.0.8` or `@v1`.
