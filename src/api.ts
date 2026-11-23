@@ -9,11 +9,24 @@ export interface MatchedDatasource {
   providerType: string;
 }
 
+export interface PullRequestInfo {
+  id: string;
+  baseBranch?: string;
+  title?: string;
+  url?: string;
+}
+
 export interface StartScanParams {
   providerType: string;
   datasourceName: string;
+  /** owner/repo (ADO: Project/Repo). Falls back to datasourceName server-side. */
+  repoName?: string;
   scanners: string[];
   branchName?: string;
+  /** CI commit SHA, stored on scan_jobs / scan_results. */
+  commitSha?: string;
+  /** PR Runs grouping + deep links. Omit for plain branch scans. */
+  pullRequest?: PullRequestInfo;
 }
 
 export interface ScanExecutionResult {
@@ -327,8 +340,11 @@ export function createZeroXClient(baseUrl: string, apiKey: string) {
       const body = {
         providerType: params.providerType,
         datasourceName: params.datasourceName,
+        repoName: params.repoName,
         scanners: params.scanners,
         branchName: params.branchName,
+        commitSha: params.commitSha,
+        pullRequest: params.pullRequest,
       };
 
       const data = await requestData<MultiScanExecutionResponse>(

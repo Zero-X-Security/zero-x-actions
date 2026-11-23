@@ -16,19 +16,18 @@ inputs:
     default: 'https://in.zero-x.cloud'
     required: true
   scanners:
-    description: 'Comma-separated list: vulns, iac, sast, malware, sbom (default all)'
+    description: 'Comma-separated list: vulns, iac, sast, secrets, malware, sbom, inventory, ai-spm, misconfigurations, ciem (API names such as VULNERABILITY or "DEPENDENCIES & SBOM" also work)'
     required: false
     default: 'vulns,iac,sast,malware,sbom'
   provider-type:
-    description: 'Zero-X datasource provider type (default: github)'
+    description: 'Zero-X datasource provider type (GitHub, GitLab, Bitbucket, AzureDevOps)'
     required: false
-    default: 'github'
+    default: 'GitHub'
   branch-name:
-    description: 'Branch name (default: github.ref_name)'
+    description: 'Branch name (default: PR head branch on pull requests, otherwise github.ref_name)'
     required: false
-    default: 'main'
   commit-sha:
-    description: 'Commit SHA for Code Scanning upload (default: github.sha)'
+    description: 'Commit SHA sent to Zero-X and used for Code Scanning upload (default: PR head SHA on pull requests, otherwise github.sha)'
     required: false
   run-url:
     description: 'URL to the workflow run (optional)'
