@@ -29,6 +29,18 @@ inputs:
   commit-sha:
     description: 'Commit SHA sent to Zero-X and used for Code Scanning upload (default: PR head SHA on pull requests, otherwise github.sha)'
     required: false
+  pr-id:
+    description: 'Pull request number (required by Zero-X). Default: detected from the pull_request event, or looked up via the GitHub API for the branch.'
+    required: true
+  pr-base-branch:
+    description: 'Pull request base branch (optional). Default: fetched from GitHub'
+    required: false
+  pr-title:
+    description: 'Pull request title (required by Zero-X). Default: fetched from GitHub'
+    required: true
+  pr-url:
+    description: 'Pull request URL (required by Zero-X). Default: fetched from GitHub'
+    required: true
   run-url:
     description: 'URL to the workflow run (optional)'
     required: false
@@ -46,7 +58,7 @@ inputs:
     required: false
     default: 'true'
   github-token:
-    description: 'GitHub token with security-events: write (default: GITHUB_TOKEN)'
+    description: 'GitHub token with security-events: write and pull-requests: read (default: GITHUB_TOKEN)'
     required: false
 
 outputs:

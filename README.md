@@ -27,12 +27,13 @@ jobs:
     permissions:
       contents: read
       security-events: write
+      pull-requests: read   # lets the action fetch PR details from GitHub
     steps:
       - uses: actions/checkout@v4
 
       - name: Zero-X Security Scan
         id: zerox
-        uses: zero-x-security/zero-x-actions@v1.0.6
+        uses: zero-x-security/zero-x-actions@v1.0.7
         with:
           zerox-api-key: ${{ secrets.ZEROX_API_KEY }}
           zerox-url: ${{ secrets.ZEROX_URL }}
@@ -68,6 +69,10 @@ After a successful run, open the repo **Security** tab → **Code scanning** (un
 | `provider-type` | Yes | `GitHub` | Datasource provider type used for pre-check and scan execution. |
 | `branch-name` | Yes | PR head branch / `github.ref_name` | Branch name sent to Zero-X. |
 | `commit-sha` | Yes | PR head SHA / `github.sha` | Commit SHA sent to Zero-X. On pull requests the PR number, base branch, title and URL are also sent automatically for PR Runs grouping. The SARIF upload uses this input or `github.sha`. |
+| `pr-id` | Yes | Auto | Pull request number. Taken from the `pull_request` event; on other runs the open PR for the branch is looked up through the GitHub API. Sent with base branch, title and URL for PR Runs grouping. |
+| `pr-base-branch` | No | Auto (GitHub) | Override the PR base branch. |
+| `pr-title` | Yes | Auto (GitHub) | Override the PR title. |
+| `pr-url` | Yes | Auto (GitHub) | Override the PR URL. |
 | `run-url` | No | Workflow run URL | URL to the GitHub Actions run. |
 | `repo-name` | Yes | `github.repository` | Repository full name (`owner/repo`) used for Zero-X availability pre-check. |
 | `repo-owner` | No | `github.repository_owner` | Repository owner. |
@@ -124,7 +129,7 @@ There are two main ways to validate the project:
    - Create Environment **zerox-ci** under Settings → Environments (required by Test action).
 
 2. **In a consumer repository**  
-   Publish or reference a version of this action (e.g. `zero-x-security/zero-x-actions@v1.0.6`) and use it in a workflow as shown in the Usage section above.
+   Publish or reference a version of this action (e.g. `zero-x-security/zero-x-actions@v1.0.7`) and use it in a workflow as shown in the Usage section above.
 
 For more details on the CI workflows, see [docs/ci-workflows.md](docs/ci-workflows.md).
 
@@ -135,6 +140,6 @@ See **[`docs/publishing.md`](docs/publishing.md)** for the full step-by-step gui
 Short version:
 
 1. Build and commit `dist/` (`npm ci && npm run build`).
-2. Create a release tag (e.g. `v1.0.6`) and publish a **GitHub Release**.
+2. Create a release tag (e.g. `v1.0.7`) and publish a **GitHub Release**.
 3. Optionally check **Publish this Action to the GitHub Marketplace** (public repo + 2FA required).
-4. Consumers use `YOUR_ORG/zero-x-actions@v1.0.6` or `@v1`.
+4. Consumers use `YOUR_ORG/zero-x-actions@v1.0.7` or `@v1`.
