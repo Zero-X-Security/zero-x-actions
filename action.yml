@@ -30,17 +30,17 @@ inputs:
     description: 'Commit SHA sent to Zero-X and used for Code Scanning upload (default: PR head SHA on pull requests, otherwise github.sha)'
     required: false
   pr-id:
-    description: 'Pull request number (required by Zero-X). Default: detected from the pull_request event, or looked up via the GitHub API for the branch.'
-    required: true
+    description: 'Pull request number (optional). Default: detected from the pull_request event, or looked up via the GitHub API for the branch.'
+    required: false
   pr-base-branch:
     description: 'Pull request base branch (optional). Default: fetched from GitHub'
     required: false
   pr-title:
-    description: 'Pull request title (required by Zero-X). Default: fetched from GitHub'
-    required: true
+    description: 'Pull request title (optional). Default: fetched from GitHub'
+    required: false
   pr-url:
-    description: 'Pull request URL (required by Zero-X). Default: fetched from GitHub'
-    required: true
+    description: 'Pull request URL (optional). Default: fetched from GitHub'
+    required: false
   run-url:
     description: 'URL to the workflow run (optional)'
     required: false
