@@ -476,19 +476,6 @@ export async function run(): Promise<void> {
   const ci = await resolveCiContext(repoName, githubToken);
   const branchName = ci.branchName;
 
-  // Pull request details are mandatory: id, title and url (baseBranch is optional).
-  const prDetails = ci.pullRequest;
-  const missing = (['id', 'title', 'url'] as const).filter(
-    (k) => !prDetails?.[k],
-  );
-  if (missing.length > 0) {
-    core.setOutput('outcome', 'failure');
-    core.setFailed(
-      `Pull request details are required but missing: ${missing.join(', ')}. Run the workflow on a pull_request event (or on a branch with an open pull request), grant 'pull-requests: read', or set the pr-* inputs.`,
-    );
-    return;
-  }
-
   const client = createZeroXClient(baseUrl, apiKey);
   const baseUrlNormalized = baseUrl.replace(/\/+$/, '');
 
