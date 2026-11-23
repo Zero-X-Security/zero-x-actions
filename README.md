@@ -44,6 +44,12 @@ jobs:
           branch-name: ${{ github.head_ref || github.ref_name }}
           commit-sha: ${{ github.event.pull_request.head.sha || github.sha }}
           repo-name: ${{ github.repository }}
+          # Pull request details sent to Zero-X (id, title, url required; base branch optional).
+          # Detected automatically; set them only to override. Empty on non-PR events.
+          pr-id: ${{ github.event.pull_request.number }}
+          pr-base-branch: ${{ github.event.pull_request.base.ref }}
+          pr-title: ${{ github.event.pull_request.title }}
+          pr-url: ${{ github.event.pull_request.html_url }}
           # Optional overrides:
           # upload-to-github: 'true'
           # scanners: 'vulns,iac,sast,malware,sbom'
