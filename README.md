@@ -32,18 +32,20 @@ jobs:
 
       - name: Zero-X Security Scan
         id: zerox
-        uses: zero-x-security/zero-x-actions@v1.0.5
+        uses: zero-x-security/zero-x-actions@v1.0.6
         with:
           zerox-api-key: ${{ secrets.ZEROX_API_KEY }}
           zerox-url: ${{ secrets.ZEROX_URL }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          provider-type: GitHub
+          # On pull requests github.ref_name is "<n>/merge" and github.sha is the
+          # merge commit, so use the PR head branch and head commit instead.
+          branch-name: ${{ github.head_ref || github.ref_name }}
+          commit-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+          repo-name: ${{ github.repository }}
           # Optional overrides:
           # upload-to-github: 'true'
           # scanners: 'vulns,iac,sast,malware,sbom'
-          # provider-type: github
-          # branch-name: ${{ github.ref_name }}
-          # commit-sha: ${{ github.sha }}
-          # repo-name: ${{ github.repository }}
 
       - name: Open scan results
         run: |
@@ -62,12 +64,12 @@ After a successful run, open the repo **Security** tab → **Code scanning** (un
 |-------|----------|---------|-------------|
 | `zerox-api-key` | Yes | - | Platform API key from Zero-X Cloud (Settings → API Keys). Sent as `api-key` header. |
 | `zerox-url` | Yes | - | Zero-X platform base URL (e.g. `https://app.zero-x.cloud`). |
-| `scanners` | No | `vulns,iac,sast,malware,sbom` | Comma-separated list: `vulns`, `iac`, `sast`, `malware`, `sbom`. |
-| `provider-type` | No | `github` | Datasource provider type used for pre-check and scan execution. |
-| `branch-name` | No | `github.ref_name` | Branch name sent to Zero-X. |
-| `commit-sha` | No | `github.sha` | Commit SHA used for Code Scanning SARIF upload. |
+| `scanners` | No | `vulns,iac,sast,malware,sbom` | Comma-separated list: `vulns`, `iac`, `sast`, `secrets`, `malware`, `sbom`, `inventory`, `ai-spm`, `misconfigurations`, `ciem`. Mapped to API names (e.g. `vulns` → `VULNERABILITY`, `sbom` → `DEPENDENCIES & SBOM`); API names are also accepted. |
+| `provider-type` | Yes | `GitHub` | Datasource provider type used for pre-check and scan execution. |
+| `branch-name` | Yes | PR head branch / `github.ref_name` | Branch name sent to Zero-X. |
+| `commit-sha` | Yes | PR head SHA / `github.sha` | Commit SHA sent to Zero-X. On pull requests the PR number, base branch, title and URL are also sent automatically for PR Runs grouping. The SARIF upload uses this input or `github.sha`. |
 | `run-url` | No | Workflow run URL | URL to the GitHub Actions run. |
-| `repo-name` | No | `github.repository` | Repository full name (`owner/repo`) used for Zero-X availability pre-check. |
+| `repo-name` | Yes | `github.repository` | Repository full name (`owner/repo`) used for Zero-X availability pre-check. |
 | `repo-owner` | No | `github.repository_owner` | Repository owner. |
 | `repo-url` | No | `github.repository_url`-style | Repository URL. |
 | `upload-to-github` | No | `true` | Upload SARIF findings to GitHub Code Scanning. |
@@ -122,7 +124,7 @@ There are two main ways to validate the project:
    - Create Environment **zerox-ci** under Settings → Environments (required by Test action).
 
 2. **In a consumer repository**  
-   Publish or reference a version of this action (e.g. `zero-x-security/zero-x-actions@v1.0.5`) and use it in a workflow as shown in the Usage section above.
+   Publish or reference a version of this action (e.g. `zero-x-security/zero-x-actions@v1.0.6`) and use it in a workflow as shown in the Usage section above.
 
 For more details on the CI workflows, see [docs/ci-workflows.md](docs/ci-workflows.md).
 
@@ -133,6 +135,6 @@ See **[`docs/publishing.md`](docs/publishing.md)** for the full step-by-step gui
 Short version:
 
 1. Build and commit `dist/` (`npm ci && npm run build`).
-2. Create a release tag (e.g. `v1.0.5`) and publish a **GitHub Release**.
+2. Create a release tag (e.g. `v1.0.6`) and publish a **GitHub Release**.
 3. Optionally check **Publish this Action to the GitHub Marketplace** (public repo + 2FA required).
-4. Consumers use `YOUR_ORG/zero-x-actions@v1.0.5` or `@v1`.
+4. Consumers use `YOUR_ORG/zero-x-actions@v1.0.6` or `@v1`.
