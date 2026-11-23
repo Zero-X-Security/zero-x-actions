@@ -8,6 +8,8 @@ import {
   type PullRequestInfo,
 } from './api';
 import {
+  findOpenPullRequestByBranch,
+  getPullRequest,
   parseOwnerRepo,
   resolveGitRef,
   uploadSarifToCodeScanning,
@@ -72,55 +74,123 @@ interface CiContext {
   pullRequest?: PullRequestInfo;
 }
 
-/** Derive branch, commit and PR details from the GitHub Actions environment. */
-function resolveCiContext(): CiContext {
+/**
+ * Derive branch, commit and PR details.
+ * PR details come from the pull_request event payload, then are completed or
+ * looked up through the GitHub API (so push runs on a PR branch are linked too).
+ * Explicit pr-* inputs always win.
+ */
+async function resolveCiContext(
+  repoName: string,
+  githubToken?: string,
+): Promise<CiContext> {
   const env = process.env;
-  const isPr = (env.GITHUB_EVENT_NAME ?? '').startsWith('pull_request');
-  let payload: {
-    pull_request?: {
-      number?: number;
-      title?: string;
-      html_url?: string;
-      head?: { ref?: string; sha?: string };
-      base?: { ref?: string };
-    };
-  } = {};
-  if (isPr && env.GITHUB_EVENT_PATH) {
-    try {
-      payload = JSON.parse(fs.readFileSync(env.GITHUB_EVENT_PATH, 'utf8'));
-    } catch {
-      core.warning('Could not read the pull request event payload.');
-    }
-  }
-  const pr = payload.pull_request;
-
+  const isPrEvent = (env.GITHUB_EVENT_NAME ?? '').startsWith('pull_request');
   const inputBranch = core.getInput('branch-name');
   const inputSha = core.getInput('commit-sha');
-
-  if (!isPr || !pr?.number) {
-    return {
-      branchName: inputBranch || env.GITHUB_REF_NAME,
-      commitSha: inputSha || env.GITHUB_SHA,
-    };
-  }
-
   const server = (env.GITHUB_SERVER_URL || 'https://github.com').replace(
     /\/+$/,
     '',
   );
-  return {
-    branchName: inputBranch || pr.head?.ref || env.GITHUB_HEAD_REF,
+
+  let payloadPr:
+    | {
+        number?: number;
+        title?: string;
+        html_url?: string;
+        head?: { ref?: string; sha?: string };
+        base?: { ref?: string };
+      }
+    | undefined;
+  if (isPrEvent && env.GITHUB_EVENT_PATH) {
+    try {
+      payloadPr = JSON.parse(fs.readFileSync(env.GITHUB_EVENT_PATH, 'utf8'))
+        .pull_request;
+    } catch {
+      core.warning('Could not read the pull request event payload.');
+    }
+  }
+
+  let branchName = inputBranch || env.GITHUB_REF_NAME;
+  let commitSha = inputSha || env.GITHUB_SHA;
+  let pr: PullRequestInfo | undefined;
+
+  if (payloadPr?.number) {
+    branchName = inputBranch || payloadPr.head?.ref || env.GITHUB_HEAD_REF;
     // GITHUB_SHA is the merge commit on PRs; report the PR head commit.
-    commitSha: inputSha || pr.head?.sha || env.GITHUB_SHA,
-    pullRequest: {
-      id: String(pr.number),
-      baseBranch: pr.base?.ref || env.GITHUB_BASE_REF,
-      title: pr.title,
+    commitSha = inputSha || payloadPr.head?.sha || env.GITHUB_SHA;
+    pr = {
+      id: String(payloadPr.number),
+      baseBranch: payloadPr.base?.ref || env.GITHUB_BASE_REF,
+      title: payloadPr.title,
+      url: payloadPr.html_url,
+    };
+  }
+
+  const prIdInput = core.getInput('pr-id');
+  const ownerRepo = parseOwnerRepo(repoName);
+  const apiUrl = env.GITHUB_API_URL;
+
+  if (ownerRepo && githubToken) {
+    try {
+      const number = prIdInput || pr?.id;
+      if (number && (!pr?.title || !pr.url || !pr.baseBranch)) {
+        // Complete missing details from GET /pulls/{number}.
+        const found = await getPullRequest({
+          token: githubToken,
+          apiUrl,
+          ...ownerRepo,
+          number: Number(number),
+        });
+        pr = {
+          id: String(found.number),
+          baseBranch: pr?.baseBranch || found.baseBranch,
+          title: pr?.title || found.title,
+          url: pr?.url || found.url,
+        };
+      } else if (
+        !number &&
+        branchName &&
+        (env.GITHUB_REF_TYPE ?? 'branch') === 'branch'
+      ) {
+        // Push / manual run: find the open PR for this branch, if any.
+        const found = await findOpenPullRequestByBranch({
+          token: githubToken,
+          apiUrl,
+          ...ownerRepo,
+          branch: branchName,
+        });
+        if (found) {
+          core.info(`Linked to pull request #${found.number} via GitHub API`);
+          pr = {
+            id: String(found.number),
+            baseBranch: found.baseBranch,
+            title: found.title,
+            url: found.url,
+          };
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      core.info(`Could not fetch pull request details from GitHub: ${message}`);
+    }
+  }
+
+  // Explicit overrides (also allow PR details outside pull_request events).
+  if (prIdInput || pr) {
+    const id = prIdInput || pr!.id;
+    pr = {
+      id,
+      baseBranch: core.getInput('pr-base-branch') || pr?.baseBranch,
+      title: core.getInput('pr-title') || pr?.title,
       url:
-        pr.html_url ||
-        `${server}/${env.GITHUB_REPOSITORY}/pull/${pr.number}`,
-    },
-  };
+        core.getInput('pr-url') ||
+        pr?.url ||
+        `${server}/${repoName}/pull/${id}`,
+    };
+  }
+
+  return { branchName, commitSha, pullRequest: pr };
 }
 
 function parseBool(raw: string, defaultValue: boolean): boolean {
@@ -390,8 +460,6 @@ export async function run(): Promise<void> {
   const providerType = normalizeProviderType(
     core.getInput('provider-type') || 'GitHub',
   );
-  const ci = resolveCiContext();
-  const branchName = ci.branchName;
   const repoName = core.getInput('repo-name') || process.env.GITHUB_REPOSITORY;
   const uploadToGithub = parseBool(core.getInput('upload-to-github'), true);
   const githubToken =
@@ -401,6 +469,22 @@ export async function run(): Promise<void> {
     core.setOutput('outcome', 'failure');
     core.setFailed(
       'Repository name is required (set repo-name or run in GitHub Actions so GITHUB_REPOSITORY is available).',
+    );
+    return;
+  }
+
+  const ci = await resolveCiContext(repoName, githubToken);
+  const branchName = ci.branchName;
+
+  // Pull request details are mandatory: id, title and url (baseBranch is optional).
+  const prDetails = ci.pullRequest;
+  const missing = (['id', 'title', 'url'] as const).filter(
+    (k) => !prDetails?.[k],
+  );
+  if (missing.length > 0) {
+    core.setOutput('outcome', 'failure');
+    core.setFailed(
+      `Pull request details are required but missing: ${missing.join(', ')}. Run the workflow on a pull_request event (or on a branch with an open pull request), grant 'pull-requests: read', or set the pr-* inputs.`,
     );
     return;
   }
@@ -428,17 +512,23 @@ export async function run(): Promise<void> {
     `Repository found in Zero-X: ${matched.name} (${matched.datasourceId})`,
   );
 
+  const scanParams = {
+    providerType: matched.providerType || providerType,
+    datasourceName: matched.name,
+    repoName,
+    scanners,
+    branchName,
+    commitSha: ci.commitSha,
+    pullRequest: ci.pullRequest,
+  };
+  // The api-key is sent as a header, so the body is safe to log.
+  core.info(
+    `Starting scan: POST /tenant/scan/execution\n${JSON.stringify(scanParams, null, 2)}`,
+  );
+
   let jobIds: string[];
   try {
-    const startRes = await client.startScan({
-      providerType: matched.providerType || providerType,
-      datasourceName: matched.name,
-      repoName,
-      scanners,
-      branchName,
-      commitSha: ci.commitSha,
-      pullRequest: ci.pullRequest,
-    });
+    const startRes = await client.startScan(scanParams);
     jobIds = startRes.jobIds;
     core.info(`Scan queued (job ids): ${jobIds.join(', ')}`);
   } catch (err) {

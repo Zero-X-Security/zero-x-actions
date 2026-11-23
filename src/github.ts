@@ -92,3 +92,82 @@ export function resolveGitRef(ref?: string, branchName?: string): string {
   }
   return ref || 'refs/heads/main';
 }
+
+export interface GitHubPullRequest {
+  number: number;
+  title?: string;
+  url?: string;
+  baseBranch?: string;
+  headBranch?: string;
+  headSha?: string;
+}
+
+interface PullApiItem {
+  number: number;
+  title?: string;
+  html_url?: string;
+  base?: { ref?: string };
+  head?: { ref?: string; sha?: string };
+}
+
+function toPullRequest(item: PullApiItem): GitHubPullRequest {
+  return {
+    number: item.number,
+    title: item.title,
+    url: item.html_url,
+    baseBranch: item.base?.ref,
+    headBranch: item.head?.ref,
+    headSha: item.head?.sha,
+  };
+}
+
+async function githubGet<T>(
+  token: string,
+  apiUrl: string | undefined,
+  path: string,
+): Promise<T> {
+  const res = await fetch(`${normalizeApiUrl(apiUrl)}${path}`, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`GitHub API ${res.status} on GET ${path.split('?')[0]}`);
+  }
+  return (await res.json()) as T;
+}
+
+/** GET /repos/{owner}/{repo}/pulls/{number} */
+export async function getPullRequest(params: {
+  token: string;
+  owner: string;
+  repo: string;
+  number: number;
+  apiUrl?: string;
+}): Promise<GitHubPullRequest> {
+  const item = await githubGet<PullApiItem>(
+    params.token,
+    params.apiUrl,
+    `/repos/${encodeURIComponent(params.owner)}/${encodeURIComponent(params.repo)}/pulls/${params.number}`,
+  );
+  return toPullRequest(item);
+}
+
+/** Find the open pull request whose head is the given branch (same-repo PRs). */
+export async function findOpenPullRequestByBranch(params: {
+  token: string;
+  owner: string;
+  repo: string;
+  branch: string;
+  apiUrl?: string;
+}): Promise<GitHubPullRequest | undefined> {
+  const head = encodeURIComponent(`${params.owner}:${params.branch}`);
+  const items = await githubGet<PullApiItem[]>(
+    params.token,
+    params.apiUrl,
+    `/repos/${encodeURIComponent(params.owner)}/${encodeURIComponent(params.repo)}/pulls?state=open&head=${head}&per_page=1`,
+  );
+  return items.length > 0 ? toPullRequest(items[0]) : undefined;
+}
